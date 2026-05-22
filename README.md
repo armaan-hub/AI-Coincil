@@ -4,34 +4,46 @@ A collection of universal skills for autonomous multi-agent orchestration using 
 
 ## Skills
 
-### [`ai-council-orchestration`](./skills/ai-council-orchestration/SKILL.md)
+### [`council-orchestration`](./skills/council-orchestration/SKILL.md) ⭐ Universal / Single-Model
 
-A self-governing multi-agent pipeline that executes any complex objective autonomously across 5 strict stages:
+A self-governing 5-stage pipeline where **all agents run on your current active model** — no model switching, no external API dependencies. Works in Claude Code, Copilot CLI, Codex, and any CLI.
 
-| Stage | Agent | Model |
-|---|---|---|
-| 1 — Think | Thinker | GPT-5.5 |
-| 2 — Plan | Planner | GPT-5.4 |
-| 3 — Create | Creator | GPT-5.3-Codex |
-| 4 — Review & Test | Reviewer & Tester | Claude Opus 4.7 |
-| 5 — Verify & Deliver | Verifier | Claude Sonnet 4.6 |
+| Stage | Role |
+|---|---|
+| 1 — Think | Thinker sub-agent |
+| 2 — Plan | Planner sub-agent |
+| 3 — Create | Creator sub-agent |
+| 4 — Review & Test | Reviewer sub-agent |
+| 5 — Verify & Deliver | Verifier sub-agent |
 
-**Use when:** facing any complex multi-step objective requiring autonomous end-to-end delivery without user intervention.
+**Use when:** autonomous end-to-end delivery needed, single active model only.
 
-## Usage
+---
 
-Copy the skill to your agent's skills directory:
+### [`ai-council-orchestration`](./skills/ai-council-orchestration/SKILL.md) Multi-Model
 
-\`\`\`bash
-# For Claude Code
-cp skills/ai-council-orchestration/SKILL.md ~/.claude/skills/ai-council-orchestration/SKILL.md
+The original multi-model variant with explicit model assignments (GPT-5.5, Claude Opus, etc.).
 
-# For Copilot CLI (superpowers)
-cp skills/ai-council-orchestration/SKILL.md \
-  ~/.copilot/installed-plugins/superpowers-marketplace/superpowers/skills/ai-council-orchestration/SKILL.md
-\`\`\`
+**Use when:** you have access to multiple models and want specialized agents per stage.
 
-Then invoke in any session:
-\`\`\`
-Use the skill tool to invoke "ai-council-orchestration"
-\`\`\`
+---
+
+## Installation
+
+### Claude Code
+```bash
+git clone https://github.com/armaan-hub/AI-Coincil.git
+cp -r AI-Coincil/skills/council-orchestration ~/.claude/skills/
+```
+
+### Copilot CLI (superpowers)
+```bash
+git clone https://github.com/armaan-hub/AI-Coincil.git
+cp -r AI-Coincil/skills/council-orchestration \
+  ~/.copilot/installed-plugins/superpowers-marketplace/superpowers/skills/
+```
+
+### Invoke
+```
+Use the skill tool to invoke "council-orchestration"
+```

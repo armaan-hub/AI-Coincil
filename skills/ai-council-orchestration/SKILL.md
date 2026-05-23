@@ -163,11 +163,60 @@ Invoke each superpower at its designated stage only:
 | **Dual-test Stage 3** | Both implementations tested in parallel; first to pass is canonical |
 | **Create skills when needed** | Missing capability → `writing-skills`, never improvise undocumented logic |
 
+## Announcement Protocol
+
+**Every agent MUST print announcements before and after every skill invocation, sub-agent dispatch, and model call. Silence is forbidden.**
+
+The Council Head must prompt any agent that skips an announcement.
+
+### Format
+
+**Entering a stage or invoking a skill:**
+```
+## 🔵 [Stage N — STAGE NAME] Invoking: `skill-name` | Agent: AgentName (Model)
+```
+
+**Stage or skill completed:**
+```
+## ✅ [Stage N — STAGE NAME] Complete | Output: <what was produced> | → Next: Stage N+1
+```
+
+**Critic parallel run — entering:**
+```
+## 🔍 [Stage N — Critic] Reviewing output in parallel | Agent: Critic (Claude Opus 4.7)
+```
+
+**Critic parallel run — done:**
+```
+## ✅ [Stage N — Critic] Critique Report ready | Concerns: <count, or "none">
+```
+
+**Sub-agent dispatched:**
+```
+## 🚀 [Stage N] Dispatching sub-agent: <role> | Model: <model> | Task: <brief description>
+```
+
+**Error or recall:**
+```
+## ❌ [Stage N — STAGE NAME] Issue detected | Recalling: AgentName | Reason: <brief>
+## 🔄 [Stage N — STAGE NAME] Retrying | Agent: AgentName (Model)
+```
+
+### Rules
+
+- Print `🔵` **before** every `Invoke X` action
+- Print `✅` **after** every skill or sub-agent completes
+- Print `🚀` for every parallel sub-agent dispatch, one line per agent with model name
+- Print `🔍` when Critic starts, `✅` when Critic delivers its report
+- Print `❌` + `🔄` on any recall or retry
+- **Never skip.** Any invocation without an announcement is a protocol violation.
+
 ## Activation
 
 On receiving any objective:
-1. Execute `using-superpowers` to initialize the skills system
-2. Autonomously activate Stages 1–5 in strict sequence without further instruction
-3. Deliver complete, verified, production-ready output
+1. Print: `## 🔵 [Init] Invoking: \`using-superpowers\` | Loading skills system`
+2. Execute `using-superpowers` to initialize the skills system
+3. Autonomously activate Stages 1–5 in strict sequence without further instruction
+4. Deliver complete, verified, production-ready output
 
 The council is active. Awaiting the objective.

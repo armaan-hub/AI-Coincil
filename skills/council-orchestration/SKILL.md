@@ -184,11 +184,60 @@ cp -r council-orchestration \
 Use the skill tool to invoke "council-orchestration"
 ```
 
+## Announcement Protocol
+
+**Every agent MUST print announcements before and after every skill invocation, sub-agent dispatch, and model call. Silence is forbidden.**
+
+The Council Head must prompt any agent that skips an announcement.
+
+### Format
+
+**Entering a stage or invoking a skill:**
+```
+## 🔵 [Stage N — STAGE NAME] Invoking: `skill-name` | Agent: AgentName
+```
+
+**Stage or skill completed:**
+```
+## ✅ [Stage N — STAGE NAME] Complete | Output: <what was produced> | → Next: Stage N+1
+```
+
+**Critic parallel run — entering:**
+```
+## 🔍 [Stage N — Critic] Reviewing output in parallel
+```
+
+**Critic parallel run — done:**
+```
+## ✅ [Stage N — Critic] Critique Report ready | Concerns: <count, or "none">
+```
+
+**Sub-agent dispatched:**
+```
+## 🚀 [Stage N] Dispatching sub-agent: <role> | Task: <brief description>
+```
+
+**Error or recall:**
+```
+## ❌ [Stage N — STAGE NAME] Issue detected | Recalling agent | Reason: <brief>
+## 🔄 [Stage N — STAGE NAME] Retrying
+```
+
+### Rules
+
+- Print `🔵` **before** every `Invoke X` action
+- Print `✅` **after** every skill or sub-agent completes
+- Print `🚀` for every parallel sub-agent dispatch, one line per agent
+- Print `🔍` when Critic starts, `✅` when Critic delivers its report
+- Print `❌` + `🔄` on any recall or retry
+- **Never skip.** Any invocation without an announcement is a protocol violation.
+
 ## Activation
 
 On receiving any objective:
-1. Execute `using-superpowers` to initialize the skills system
-2. Autonomously activate Stages 1–5 in strict sequence
-3. Deliver complete, verified, production-ready output
+1. Print: `## 🔵 [Init] Invoking: \`using-superpowers\` | Loading skills system`
+2. Execute `using-superpowers` to initialize the skills system
+3. Autonomously activate Stages 1–5 in strict sequence
+4. Deliver complete, verified, production-ready output
 
 The council is active on the current model. Awaiting the objective.

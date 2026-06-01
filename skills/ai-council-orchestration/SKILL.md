@@ -149,6 +149,27 @@ Invoke each superpower at its designated stage only:
 
 ---
 
+## Context Management Protocol
+
+**Context overflow silently corrupts long pipeline runs. The Council Head MUST monitor token usage continuously.**
+
+### Rule
+
+When the active context window reaches **160,000 tokens**, immediately run `/compact` before taking any further action.
+
+- **Announce before compacting:**
+  ```
+  ## 🟡 [Context Manager] Context at 160K+ tokens — running `/compact` to preserve pipeline integrity
+  ```
+- **Announce after compacting:**
+  ```
+  ## ✅ [Context Manager] Context compacted — resuming Stage N from <last checkpoint>
+  ```
+- **Resume:** After `/compact` completes, continue from the exact stage and task that was interrupted. All active directives remain in effect.
+- **Never compact mid-task:** If a task is actively in progress, finish the current atomic unit first, then compact.
+
+---
+
 ## Standing Directives
 
 | Directive | Rule |
@@ -162,6 +183,7 @@ Invoke each superpower at its designated stage only:
 | **Preserve what works** | During debugging, only broken components are touched |
 | **Dual-test Stage 3** | Both implementations tested in parallel; first to pass is canonical |
 | **Create skills when needed** | Missing capability → `writing-skills`, never improvise undocumented logic |
+| **Auto-compact at 160K** | Run `/compact` when context ≥ 160K tokens — never wait until overflow |
 
 ## Announcement Protocol
 

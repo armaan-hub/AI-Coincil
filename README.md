@@ -2,7 +2,7 @@
 
 A self-looping, never-stopping multi-agent orchestration system inspired by [Karpathy's autoresearch](https://github.com/karpathy/autoresearch.git).
 
-**The council cycles through 5 stages (Think → Plan → Create → Review → Verify) in an autonomous loop, invoking superpowers skills at every stage, until the objective is fully resolved.**
+**The council cycles through 5 stages (Think → Plan → Create → Review → Verify) in an autonomous loop. All 14 superpower patterns are embedded inline — zero external Skill dependencies. The loop runs until the objective is fully resolved.**
 
 ## Architecture
 
@@ -31,13 +31,13 @@ A self-looping, never-stopping multi-agent orchestration system inspired by [Kar
 
 All agents run on your current active model. No model switching needed. Works in any CLI.
 
-| Stage | Superpowers Invoked |
+| Stage | Embedded Patterns Used |
 |---|---|
-| **1 — Think** | `brainstorming` + Thinker sub-agent + Critic sub-agent |
-| **2 — Plan** | `writing-plans` + Planner sub-agent + Critic sub-agent |
-| **3 — Create** | `dispatching-parallel-agents` + `subagent-driven-development` + `test-driven-development` + `writing-skills` |
-| **4 — Review & Test** | `code-review` + `systematic-debugging` + `verification-before-completion` |
-| **5 — Verify & Deliver** | `verification-before-completion` + `finishing-a-development-branch` |
+| **1 — Think** | Brainstorming Pattern + Critic (embedded inline) |
+| **2 — Plan** | Writing Plans Pattern (embedded inline) |
+| **3 — Create** | TDD + Subagent-Driven Dev + Parallel Dispatch (all embedded inline) |
+| **4 — Review & Test** | Code Review + Systematic Debugging (embedded inline) |
+| **5 — Verify & Deliver** | Verification + Finishing Branch (embedded inline) |
 
 ### [`ai-council-orchestration`](./skills/ai-council-orchestration/SKILL.md) Multi-Model
 

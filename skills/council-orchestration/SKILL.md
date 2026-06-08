@@ -1,499 +1,433 @@
 ---
 name: council-orchestration
-description: Autonomous autoresearch-style loop through Think→Plan→Create→Review→Verify — iterates until objective is fully satisfied. Invokes superpowers skills at every stage. Never stops until query is resolved.
+description: Fully self-contained autonomous autoresearch loop — Think→Plan→Create→Review→Verify, iterates until objective satisfied. ALL superpower skills embedded inline, zero external dependencies.
 ---
 
-# Council Orchestration — Autonomous Loop
+# Council Orchestration — Fully Self-Contained Autonomous Loop
 
-## Overview
-
-A **self-looping, never-stopping** multi-agent pipeline that cycles through 5 stages (Think → Plan → Create → Review → Verify) until the original query is fully resolved.
-
-**Inspired by Karpathy's autoresearch:** each iteration is self-contained; the loop runs autonomously without user intervention. If the output doesn't satisfy the objective, the council loops back to Stage 1 with all accumulated context and tries again.
-
-**Core principle:** NEVER STOP. No "should I continue?" questions. No pausing for approval. Each stage invokes the appropriate **superpowers skills** explicitly via the `Skill` tool — not just references them. The loop keeps turning until the objective is met or the safety limit is hit.
-
-## Superpowers Integration
-
-Every stage **EXPLICITLY INVOKES** superpowers skills via the `Skill` tool. Do not merely describe what a skill does — invoke it with the correct namespaced name.
-
-| Stage | Skill Invocations |
-|---|---|
-| **Init** | `Skill(skill="using-superpowers")` |
-| **1 — Think** | `Skill(skill="superpowers:brainstorming")`, then spawn Thinker + Critic sub-agents |
-| **2 — Plan** | `Skill(skill="superpowers:writing-plans")`, `Skill(skill="superpowers:executing-plans")`, `Skill(skill="superpowers:using-git-worktrees")`, spawn Planner + Critic |
-| **3 — Create** | `Skill(skill="superpowers:dispatching-parallel-agents")`, `Skill(skill="superpowers:subagent-driven-development")`, `Skill(skill="superpowers:test-driven-development")`, `Skill(skill="superpowers:writing-skills")` |
-| **4 — Review & Test** | `Skill(skill="code-review:code-review")`, `Skill(skill="superpowers:requesting-code-review")`, `Skill(skill="superpowers:receiving-code-review")`, `Skill(skill="superpowers:systematic-debugging")`, `Skill(skill="superpowers:verification-before-completion")` |
-| **5 — Verify & Deliver** | `Skill(skill="superpowers:verification-before-completion")`, `Skill(skill="superpowers:finishing-a-development-branch")` |
+**Everything is built-in.** All 14 superpower patterns are embedded directly in this file. No external Skill calls needed. The council reads, applies, and loops autonomously until the objective is met.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                   MAIN ORCHESTRATION LOOP                        │
-│                                                                  │
-│  LOOP (forever):                                                 │
-│    1. council-orchestrator status    ← check current stage       │
-│    2. Execute the stage handler                                   │
-│    3. council-orchestrator status    ← verify transition         │
-│    4. GOTO step 1                     ← unconditional loop       │
-│                                                                  │
-│  BREAK ONLY when:                                                │
-│    - Delivery check says objective fully satisfied → DELIVER     │
-│    - __maxed_out__ safety limit reached → REPORT                 │
-│                                                                  │
-│  ┌──────┐   ┌──────┐   ┌──────┐   ┌──────┐   ┌──────┐          │
-│  │THINK │→  │PLAN  │→  │CREATE│→  │REVIEW│→  │VERIFY│          │
-│  │  +   │   │  +   │   │  +   │   │  &   │   │  &   │          │
-│  │CRITIC│   │CRITIC│   │CRITIC│   │ TEST │   │DELIVER│          │
-│  └──┬───┘   └──┬───┘   └──┬───┘   └──┬───┘   └──┬───┘          │
-│     │           │          │          │          │               │
-│     ◄───────────┴──────────┴──────────┴──────────┤               │
-│     │  loop back via loopback if critique/issues                   │
-│     └───────────────────────────────────────────┘                 │
-│                  │  if !satisfied → next-iteration → GOTO top    │
-│                  └─────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+MAIN LOOP (autonomous, never stop):
+
+LOOP:
+  1. council-orchestrator status          ← check current stage
+  2. Execute the stage handler            ← uses embedded patterns below
+  3. council-orchestrator status          ← verify transition
+  4. GOTO step 1                          ← UNCONDITIONAL
+
+BREAK ONLY when:
+  - Delivery check says objective satisfied → DELIVER
+  - __maxed_out__ safety limit → REPORT
+
+  ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌──────────┐   ┌──────────┐
+  │ THINK   │ → │ PLAN    │ → │ CREATE  │ → │ REVIEW   │ → │ VERIFY   │
+  │ +CRITIC │   │ +CRITIC │   │ +CRITIC │   │ & TEST   │   │ & DELIVER│
+  └────┬────┘   └────┬────┘   └────┬────┘   └────┬─────┘   └────┬─────┘
+       │             │             │             │              │
+       ◄─────────────┴─────────────┴─────────────┴──────────────┘
+       │   loop back via loopback if patterns detect issues       │
+       └──────────────────────────────────────────────────────────┘
+                     │  if !satisfied → next-iteration → GOTO top
+                     └──────────────────────────────────────────┘
 ```
 
 ---
 
 ## State Management
 
-The council maintains a **`council_journal.md`** file in the working directory. This is the persistent state — read at each wakeup, written after every stage transition.
-
-**Initialize:**
 ```bash
-council-orchestrator init "<your_objective>"
-```
-
-**Track progress:**
-```bash
-council-orchestrator status              # Current stage, iteration, loops
-council-orchestrator advance think       # Mark stage done, advance
-council-orchestrator loopback think "reason"  # Go back to a stage
-council-orchestrator next-iteration      # Start fresh iteration
-council-orchestrator history             # Full state history
+council-orchestrator init "<objective>"          # Start
+council-orchestrator status                      # Current stage
+council-orchestrator advance <stage>             # Mark done
+council-orchestrator loopback <stage> "reason"   # Go back
+council-orchestrator next-iteration              # New iteration
 ```
 
 ---
 
-## The Main Loop — CRITICAL INSTRUCTION
-
-This is the **only** control flow you follow after initialization. Read this section carefully — it defines how the loop works.
+## The Main Loop
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        MAIN LOOP                              │
-│                                                               │
-│  LOOP:                                                        │
-│    1. Run: council-orchestrator status                        │
-│    2. Look at the "Stage:" field in the output                │
-│    3. Match it to one of:                                     │
-│       • "think"             → execute Stage 1 (THINK)         │
-│       • "plan"              → execute Stage 2 (PLAN)          │
-│       • "create"            → execute Stage 3 (CREATE)        │
-│       • "review"            → execute Stage 4 (REVIEW)        │
-│       • "verify"            → execute Stage 5 (VERIFY)        │
-│       • "__delivery_check__"→ execute DELIVERY CHECK section  │
-│       • "__maxed_out__"     → print summary, STOP             │
-│    4. After the handler finishes → GOTO step 1                │
-│       (do NOT stop, do NOT ask user, do NOT pass go)          │
-│                                                               │
-│  🔴 NEVER break out of this loop EXCEPT:                      │
-│     • Delivery check says "objective met" → deliver + STOP   │
-│     • __maxed_out__ reached → report + STOP                   │
-│                                                               │
-│  🔴 NEVER ask "should I continue?" or "is this good?"         │
-│     The answer is always YES — keep looping.                  │
-└──────────────────────────────────────────────────────────────┘
+LOOP:
+  1. Run: council-orchestrator status
+  2. Match the "Stage:" field:
+     "think"             → execute Stage 1 — THINK
+     "plan"              → execute Stage 2 — PLAN
+     "create"            → execute Stage 3 — CREATE
+     "review"            → execute Stage 4 — REVIEW & TEST
+     "verify"            → execute Stage 5 — VERIFY & DELIVER
+     "__delivery_check__"→ run DELIVERY CHECK
+     "__maxed_out__"     → print summary, STOP
+  3. After handler finishes → IMMEDIATELY GOTO step 1
 ```
-
-### What This Means In Practice
-
-When you finish Stage 1 (THINK), the skill says `advance think "approved"` — this changes the journal stage to "plan". You then **IMMEDIATELY GOTO step 1** — run `council-orchestrator status`, see "plan", and execute Stage 2.
-
-Similarly, when Stage 5 (VERIFY) passes, the stage becomes `__delivery_check__`. You go back to `council-orchestrator status`, see `__delivery_check__`, and run the Delivery Check. If the objective isn't met, you run `council-orchestrator next-iteration` and **GOTO step 1** — the stage is now "think" again.
-
-**There is no "done" between stages. There is no pause. The loop is continuous.**
-
----
-
-## Activation Protocol
-
-When the `/council-orchestration` command is invoked:
-
-1. **Announce:** `## 🔵 [Init] Invoking: \`using-superpowers\` | Loading skills system`
-2. **Execute:** `Skill(skill="using-superpowers")` — loads and validates all superpowers
-3. **Initialize journal:**
-   ```bash
-   council-orchestrator init "<the user's full objective>"
-   ```
-4. **Enter the MAIN LOOP** (see above) — start with `council-orchestrator status`
 
 ---
 
 ## Stage 1 — THINK
 
-### Invoke: `brainstorming` + Spawn Thinker sub-agent + Spawn Critic sub-agent
+### Uses Embedded: Brainstorming Pattern + Critic Pattern
 
-**Step 1 — Announce:**
-``` 
-## 💭 [Stage 1 — THINK] Invoking: brainstorming | Agent: Thinker
-```
+**Announce:** `## 💭 [Stage 1 — THINK] Using Brainstorming Pattern`
 
-**Step 2 — Invoke brainstorming:**
-```
-Skill(skill="superpowers:brainstorming", args="<the objective>")
-```
-Let it load. Follow its Socratic refinement process.
+### Step 1: Explore Context
+Check project files, docs, recent commits. Understand what exists.
 
-**Step 3 — Spawn Thinker sub-agent:**
-```
-Agent(description="Thinker deep analysis", prompt="""
-You are the Thinker in an AI Council. Your job:
-1. Read the objective: <objective>
-2. Analyze every interpretation, constraint, dependency, edge case
-3. Compare multiple solution architectures (at least 3)
-4. Select the strongest approach via Socratic refinement
-5. Produce a Thought Report with:
-   - All interpretations considered
-   - Constraints and dependencies mapped
-   - Risk analysis
-   - 3+ architectures compared (pros/cons per architecture)
-   - Recommended approach with justification
-6. Save to THOUGHT_REPORT.md
-""", subagent_type="general-purpose")
-```
+### Step 2: Clarify & Decompose
+Break down the objective. Identify independent subsystems. If too large, decompose into sub-projects — each gets its own Think→Plan→Create cycle.
 
-**Step 4 — Spawn Critic sub-agent in parallel:**
-```
-Agent(description="Critic challenge thought report", prompt="""
-You are the Critic in an AI Council. Read the Thought Report as it's produced.
-Your adversarial mandate — assume the current approach is wrong:
-- What assumptions in the Thought Report could be false?
-- What risks or edge cases were not considered?
-- Is the selected architecture actually the strongest?
-- What pros/cons were missed or downplayed?
-- What could go wrong?
+### Step 3: Propose 2-3 Architectures
+Compare approaches with explicit trade-offs. Cover:
+- Architecture & components
+- Data flow & interfaces
+- Error handling & edge cases
+- Testing strategy
 
-Produce CRITIQUE_REPORT.md with explicit concerns.
-If no concerns, state: "No concerns — approach is sound."
-""", subagent_type="general-purpose")
-```
+### Step 4: Socratic Refinement
+For the recommended approach, stress-test:
+- **What assumptions are you making?** Could they be false?
+- **What constraints are non-negotiable?**
+- **What could go wrong?**
 
-**Step 5 — Council Head reviews both reports.**
-- If Critic has concerns → `council-orchestrator loopback think "<reason>"` → recall Thinker, then **GOTO MAIN LOOP step 1**
-- If no concerns → `council-orchestrator advance think "thought report + critique approved"` → then **GOTO MAIN LOOP step 1**
+### Step 5: Produce Thought Report
+Write `THOUGHT_REPORT.md` with: interpretations, constraints, risk analysis, 3+ architectures compared (pros/cons), recommended approach with justification.
+
+### Step 6: Apply Critic Pattern
+**Spawn Critic sub-agent** with mandate:
+> "Assume the current approach is wrong. What assumptions could be false? What risks were missed? Is the selected architecture actually strongest? What pros/cons were downplayed?"
+> Produce `CRITIQUE_REPORT.md`. If no concerns, state EXACTLY: "No concerns — approach is sound."
+
+### Step 7: Resolve or Advance
+- Critic has concerns → `council-orchestrator loopback think "<reason>"` → recall Thinker → **GOTO LOOP step 1**
+- No concerns → `council-orchestrator advance think "approved"` → **GOTO LOOP step 1**
 
 ---
 
 ## Stage 2 — PLAN
 
-### Invoke: `writing-plans` + `executing-plans` + `using-git-worktrees` + Spawn Planner + Critic
+### Uses Embedded: Writing Plans Pattern + Git Worktrees Pattern
 
-**Prerequisite:** Stage 1 must be complete. Read THOUGHT_REPORT.md and CRITIQUE_REPORT.md.
+**Announce:** `## 📋 [Stage 2 — PLAN] Using Writing Plans Pattern`
 
-**Step 1 — Announce:**
-```
-## 📋 [Stage 2 — PLAN] Invoking: writing-plans | Agent: Planner
-```
+### Step 1: Map File Structure
+Before tasks, map every file that will be created/modified. Each file = one clear responsibility. Follow existing codebase patterns.
 
-**Step 2 — Invoke writing-plans skill:**
+### Step 2: Decompose into Bite-Sized Tasks
+Each task = one action (2-5 minutes):
 ```
-Skill(skill="superpowers:writing-plans", args="Plan implementation for: <objective>")
-```
-Let it load. Use the structured blueprint format.
-
-**Step 3 — Invoke executing-plans skill:**
-```
-Skill(skill="superpowers:executing-plans", args="Set up batch checkpoints for: <tasks>")
+Task 1: Write failing test
+Task 2: Run to confirm failure
+Task 3: Implement minimal code
+Task 4: Run to confirm pass
+Task 5: Commit
 ```
 
-**Step 4 — Invoke using-git-worktrees skill:**
-```
-Skill(skill="superpowers:using-git-worktrees", args="Configure isolated branches for parallel workstreams")
-```
+### Step 3: Write Plan
+Write `TASK_EXECUTION_PLAN.md` with:
+- **Goal:** One sentence
+- **Architecture:** 2-3 sentences
+- **Tech Stack:** Key technologies
+- **Tasks:** Each with: files touched, exact file paths, code in steps, expected output, exact commands
 
-**Step 5 — Spawn Planner sub-agent:**
-```
-Agent(description="Planner task decomposition", prompt="""
-You are the Planner in an AI Council.
-Input: THOUGHT_REPORT.md (the selected architecture)
-Skills invoked: writing-plans, executing-plans, using-git-worktrees
-Produce a TASK_EXECUTION_PLAN.md with:
-- Discrete, ordered, atomic tasks with success criteria
-- Parallel vs. sequential dependencies flagged
-- Each task assigned to appropriate sub-agent
-- Git worktrees configured for parallel branches
-- Batch checkpoints defined
-- For each task: expected output, effort estimate, risk level
-""", subagent_type="general-purpose")
-```
+### Step 4: Self-Review Plan
+Check:
+- ✅ Spec coverage — every requirement maps to a task
+- ✅ No placeholders ("TBD", "TODO", "implement later")
+- ✅ Type consistency — function signatures match across tasks
+- ✅ Actual code in every step, not descriptions
 
-**Step 6 — Spawn Critic sub-agent in parallel:**
-```
-Agent(description="Critic challenge plan", prompt="""
-You are the Critic. Read the Task Execution Plan being produced.
-- Are any tasks under-specified or missing success criteria?
-- Are dependencies correctly identified?
-- Does the plan cover all risks from Stage 1?
-- What could cause the plan to fail or go over scope?
-- Are the effort estimates realistic?
-- Is there a simpler sequencing approach?
+### Step 5: Apply Critic Pattern
+Spawn Critic: "Are any tasks under-specified? Dependencies correct? Risks from Stage 1 covered?"
 
-Produce PLAN_CRITIQUE.md.
-""", subagent_type="general-purpose")
-```
-
-**Step 7 — Council Head reviews.**
-- If Critic has concerns → `council-orchestrator loopback plan "<reason>"` → recall Planner, **GOTO MAIN LOOP step 1**
-- If no concerns → `council-orchestrator advance plan "plan approved"` → **GOTO MAIN LOOP step 1**
+### Step 6: Resolve or Advance
+- Concerns → `council-orchestrator loopback plan "<reason>"` → **GOTO LOOP step 1**
+- Clear → `council-orchestrator advance plan "approved"` → **GOTO LOOP step 1**
 
 ---
 
 ## Stage 3 — CREATE
 
-### Invoke: `dispatching-parallel-agents` + `subagent-driven-development` + `test-driven-development` + `writing-skills`
+### Uses Embedded: TDD Pattern + Subagent-Driven Development Pattern + Parallel Dispatch Pattern + Writing Skills Pattern
 
-**Prerequisite:** Read TASK_EXECUTION_PLAN.md and PLAN_CRITIQUE.md.
+**Announce:** `## 🔧 [Stage 3 — CREATE] Using TDD + Subagent-Driven Development Patterns`
 
-**Step 1 — Announce:**
-```
-## 🔧 [Stage 3 — CREATE] Dispatching parallel creators | Using TDD
-```
+### Step 1: For Each Task — Follow TDD (strict)
 
-**Step 2 — Invoke parallel dispatch:**
+**RED — Write Failing Test First:**
 ```
-Skill(skill="superpowers:dispatching-parallel-agents", args="Run independent Create tasks concurrently")
+- Write ONE test per behavior
+- Name clearly describes behavior
+- Use real code (no mocks unless unavoidable)
+- NO production code without a failing test first
 ```
-
-**Step 3 — For EACH task in the plan, invoke subagent-driven-development:**
+**Verify RED — Watch It Fail:**
 ```
-Skill(skill="superpowers:subagent-driven-development", args="<task description>")
+- Run the test
+- Confirm it fails (for the RIGHT reason — feature missing, not typo)
+- If it passes, you're testing existing behavior → FIX THE TEST
+- If it errors, fix the error → re-run until it fails correctly
 ```
-Each task gets a fresh sub-agent with mandatory two-stage review.
-
-**Step 4 — Enforce TDD on every component:**
+**GREEN — Minimal Implementation:**
 ```
-Skill(skill="superpowers:test-driven-development", args="<component>")
+- Write SIMPLEST code to pass the test
+- No YAGNI features, no "while I'm here" improvements
+- Don't add what the test doesn't require
 ```
-RED → GREEN → REFACTOR cycle on every component. NO component passes without:
-- Test written first (RED)
-- Implementation makes it pass (GREEN)
-- Code is refactored for clarity (REFACTOR)
-
-**Step 5 — Spawn Critic sub-agent per component:**
+**Verify GREEN — Watch It Pass:**
 ```
-Agent(description="Critic review component", prompt="""
-Review the just-completed component:
-- Does it match the plan's intent, or has it drifted?
-- What could go wrong at runtime / under load / at integration?
-- Is there a simpler or more robust approach?
-- Any security, performance, or maintainability concerns?
-- Pros and cons of the implementation approach chosen
-""", subagent_type="general-purpose")
+- Run the test
+- Confirm it passes
+- Other tests still pass
+- Output pristine (no errors/warnings)
+- If fails → FIX THE CODE, not the test
 ```
-
-**Step 6 — Dual-Test Protocol:** After Critic sign-off on a component:
-- Run `subagent-driven-development` AND `verification-before-completion` in parallel
-- First to pass full verification is canonical; the other is discarded
-
+**REFACTOR — Clean Up (while staying green):**
 ```
-Skill(skill="superpowers:verification-before-completion", args="<component>")
+- Remove duplication
+- Improve names
+- Extract helpers
+- Keep tests green
+- Don't add behavior
 ```
 
-**Step 7 — Create missing reusable capabilities:**
-```
-Skill(skill="superpowers:writing-skills", args="Create skill for: <missing capability>")
-```
+**IRON LAW:** `NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST.` Write code before test? Delete it. Start over. No exceptions.
 
-**Step 8 — Council Head checks:**
-- All components implemented and tested?
+### Step 2: Dispatch Per-Task Subagents
+
+For independent tasks, spawn fresh sub-agents (NOT your session context):
+```
+Agent("Implement Task N: <description>")
+```
+Each sub-agent gets:
+- Complete task text and context (don't make them read the plan file)
+- TDD instructions embedded above
+- Self-review before reporting done
+
+### Step 3: Two-Stage Review Per Task
+
+After each task sub-agent completes:
+1. **Spec Review:** Does code match the plan? Nothing missing, nothing extra?
+2. **Code Quality Review:** Is implementation clean and well-structured?
+
+Both must pass before moving to next task.
+
+### Step 4: Parallel Dispatch for Independent Tasks
+
+If tasks have NO shared state or sequential dependencies, dispatch them in parallel — one agent per independent domain.
+
+### Step 5: Create Missing Capabilities
+
+If you discover a reusable pattern/capability is missing during creation:
+```
+Write a brief skill definition: what it is, when to use, core pattern.
+Save as skill for future reference.
+```
+Do NOT improvise undocumented logic.
+
+### Step 6: Council Head Check
+- All components implemented and TDD-verified?
+- All tests pass?
 - All Critic concerns resolved?
-- All tests pass (TDD confirmed)?
 
-If YES → `council-orchestrator advance create "all components implemented and tested"` → **GOTO MAIN LOOP step 1**
-If NO → `council-orchestrator loopback create "<reason>"` → fix and retry → **GOTO MAIN LOOP step 1**
+If YES → `council-orchestrator advance create "all done"` → **GOTO LOOP step 1**
+If NO → `council-orchestrator loopback create "<reason>"` → **GOTO LOOP step 1**
 
 ---
 
 ## Stage 4 — REVIEW & TEST
 
-### Invoke: `code-review:code-review` + `requesting-code-review` + `receiving-code-review` + `systematic-debugging` + `verification-before-completion`
+### Uses Embedded: Code Review Pattern + Systematic Debugging Pattern + Verification Pattern
 
-**Step 1 — Announce:**
-```
-## 🔍 [Stage 4 — REVIEW & TEST] Running full council review
-```
+**Announce:** `## 🔍 [Stage 4 — REVIEW & TEST] Using Code Review + Systematic Debugging Patterns`
 
-**Step 2 — Invoke the pre-review checklist:**
-```
-Skill(skill="superpowers:requesting-code-review", args="Pre-review checklist for: <objective>")
-```
+### Step 1: Pre-Review Checklist
+Before reviewing:
+- Get git SHAs: `BASE_SHA=$(git rev-parse HEAD~1)` `HEAD_SHA=$(git rev-parse HEAD)`
+- Brief summary: what was built and what it should do
 
-**Step 3 — Invoke code-review:**
+### Step 2: Full Review
+**Dispatching all council roles to review simultaneously:**
 ```
-Skill(skill="code-review:code-review", args="Review all created code for correctness and cleanups")
-```
-Use the code-review skill's pre-review checklist first, then full review.
+Agent("Reviewer — logic & correctness"):
+  "Review for: logic errors, correctness bugs, edge cases, integration gaps"
 
-**Step 4 — Spawn ALL council roles to review simultaneously:**
-```
-Agent(description="Reviewer logic & correctness", prompt="Review for logic errors, correctness bugs, edge cases")
-Agent(description="Critic security & performance", prompt="Review for security gaps, performance issues, anti-patterns")
-Agent(description="Verifier completeness", prompt="Review: does output fully satisfy the original objective?")
+Agent("Critic — security & performance"):
+  "Review for: security gaps, performance issues, anti-patterns, maintainability"
+
+Agent("Verifier — completeness"):
+  "Review: does the output fully satisfy the original objective?"
 ```
 
-**Step 5 — If feedback received, invoke receiving-code-review:**
+### Step 3: Evaluate Feedback
+When receiving review feedback:
+1. **READ** — Complete feedback without reacting
+2. **UNDERSTAND** — Restate requirement or ask for clarification
+3. **VERIFY** — Check against codebase reality
+4. **EVALUATE** — Technically sound for THIS codebase?
+5. **RESPOND** — Technical acknowledgment or reasoned pushback
+6. **IMPLEMENT** — One item at a time, test each
+
+**Never:** performative agreement ("you're absolutely right!"), blind implementation, batch without testing.
+
+**Push back if:** suggestion breaks existing functionality, reviewer lacks full context, violates YAGNI, technically incorrect for this stack.
+
+### Step 4: Produce Review Report
+Write `REVIEW_ISSUES.md` with all findings categorized:
+- Critical — must fix now
+- Important — fix before proceeding
+- Minor — note for later
+
+### Step 5: If Flaws Detected — Apply Systematic Debugging
+
+**Phase 1 — Root Cause Investigation (BEFORE any fix):**
 ```
-Skill(skill="superpowers:receiving-code-review", args="Review feedback received: <summary>")
+1. Read error messages carefully — stack traces, line numbers
+2. Reproduce consistently — exact steps, every time?
+3. Check recent changes — git diff, recent commits
+4. Trace data flow — where does the bad value originate?
 ```
-No feedback dismissed without documented reasoning.
-
-**Step 6 — Re-enforce TDD — retest all components post-review:**
+**Phase 2 — Pattern Analysis:**
 ```
-Skill(skill="superpowers:test-driven-development", args="Re-test all components after review")
+1. Find working examples — similar code that works
+2. Compare against references — read completely
+3. Identify differences — what's different between working and broken?
+```
+**Phase 3 — Hypothesis and Testing:**
+```
+1. Form single hypothesis — "I think X is root cause because Y"
+2. Test minimally — smallest possible change, one variable at a time
+3. Verify before continuing — worked? Yes → fix. No → new hypothesis.
+```
+**Phase 4 — Implementation:**
+```
+1. Create failing test case — simplest possible reproduction
+2. Implement single fix — ONE change, address root cause
+3. Verify fix — test passes, no regressions
+4. If 3+ fixes failed → STOP. Question the architecture.
 ```
 
-**Step 7 — Produce REVIEW_ISSUES.md with all findings.**
+**IRON LAW:** `NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST.`
 
-**If ANY flaw detected:**
+### Step 6: Fix Loop
+- Found flaw → apply Systematic Debugging → fix → re-verify
+- `council-orchestrator loopback review "<reason>"` → re-run review → **GOTO LOOP step 1**
+- Repeat until `REVIEW_ISSUES.md` has ZERO unresolved issues
 
-1. Announce: `## ❌ [Stage 4] Issue detected | Reason: <issue>`
-2. Invoke systematic-debugging:
-   ```
-   Skill(skill="superpowers:systematic-debugging", args="<issue>")
-   ```
-3. Follow the 4-phase root cause diagnosis:
-   - **Phase 1:** Observe — gather symptoms
-   - **Phase 2:** Hypothesize — possible root causes
-   - **Phase 3:** Experiment — test each hypothesis
-   - **Phase 4:** Fix — apply targeted fix, don't touch working code
-4. Once fixed, invoke verification:
-   ```
-   Skill(skill="superpowers:verification-before-completion", args="Confirm fix works")
-   ```
-5. `council-orchestrator loopback review "<reason>"` → re-run review → **GOTO MAIN LOOP step 1**
-6. Repeat until REVIEW_ISSUES.md has zero unresolved issues
-
-**Step 8 — When clean:** `council-orchestrator advance review "all issues resolved, tests pass"` → **GOTO MAIN LOOP step 1**
+### Step 7: Advance
+`council-orchestrator advance review "all clear"` → **GOTO LOOP step 1**
 
 ---
 
 ## Stage 5 — VERIFY & DELIVER
 
-### Invoke: `verification-before-completion` + `finishing-a-development-branch`
+### Uses Embedded: Verification Pattern + Finishing Branch Pattern
 
-**Step 1 — Announce:**
+**Announce:** `## ✅ [Stage 5 — VERIFY & DELIVER] Using Verification + Branch Finishing Patterns`
+
+### Step 1: Verification Gate
+**IRON LAW:** `NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE.`
+
+For EVERY claim, follow this gate:
 ```
-## ✅ [Stage 5 — VERIFY & DELIVER] Running final verification
+1. IDENTIFY — What command proves this claim?
+2. RUN — Execute the FULL command (fresh, complete)
+3. READ — Full output, check exit code, count failures
+4. VERIFY — Does output confirm the claim?
+   - If NO: State actual status with evidence
+   - If YES: State claim WITH evidence
 ```
 
-**Step 2 — Invoke verification-before-completion:**
-```
-Skill(skill="superpowers:verification-before-completion", args="End-to-end verification of complete solution")
-```
-Confirm every component is functional as an integrated whole.
+**Red flags:** Using "should", "probably", "seems to" before verification. Expressing satisfaction before verifying. Trusting agent success reports without checking.
 
-**Step 3 — Full satisfaction check:**
+### Step 2: Full Integration Verification
+```
+- Run the FULL test suite — not just unit tests
+- Build the project — confirm compilation
+- Check all integration points
+- Run any manual verification steps
+- Output: full verification log
+```
+
+### Step 3: Completeness Check
 ```
 Agent(description="Completeness verifier", prompt="""
 Original objective: <objective>
 Completion criteria: <from council_journal.md>
 
-Verify EVERY criterion is satisfied. Check:
-- Is every requirement from the objective met?
-- Is the output complete and self-contained?
-- Are there any edge cases or gaps?
+Verify EVERY criterion. Check:
+- Is every requirement met?
+- Is output complete and self-contained?
+- Any edge cases or gaps?
 - Can the output be used as-is?
 
 Produce VERIFICATION_SIGN_OFF.md
-- If ALL satisfied: state "VERIFIED — Ready to deliver"
+- If ALL satisfied: "VERIFIED — Ready to deliver"
 - If ANY unsatisfied: state each gap explicitly
-""", subagent_type="general-purpose")
+""")
 ```
 
-**Step 4 — Invoke finishing-a-development-branch if code needs merging:**
+### Step 4: Branch Finishing (if code to merge)
 ```
-Skill(skill="superpowers:finishing-a-development-branch", args="Merge and finalize")
+1. Verify tests pass
+2. Detect environment (normal repo vs worktree)
+3. Determine base branch (main/master)
+4. Present options (for user interaction if needed):
+   - Merge locally
+   - Push and create PR
+   - Keep branch as-is
+   - Discard
 ```
 
-**Step 5 — Decision:**
-- If verified → `council-orchestrator advance verify "verification passed"` → **GOTO MAIN LOOP step 1**
-- If not verified → `council-orchestrator loopback verify "<reason>"` → fix, re-verify → **GOTO MAIN LOOP step 1**
+### Step 5: Decision
+- Verified → `council-orchestrator advance verify "passed"` → **GOTO LOOP step 1**
+- Not verified → `council-orchestrator loopback verify "<reason>"` → **GOTO LOOP step 1**
 
 ---
 
 ## Delivery Check
 
-This runs when `council-orchestrator status` shows `stage: __delivery_check__`.
+When `council-orchestrator status` shows `stage: __delivery_check__`:
 
-**The critical gate:** does the output FULLY satisfy the original objective?
+**Step 1:** Read objective from `council_journal.md`
+**Step 2:** Read output (all created files, VERIFICATION_SIGN_OFF.md)
+**Step 3:** Compare output to completion criteria
 
-```
-## 📦 [DELIVERY CHECK] Stage: __delivery_check__ | Iteration: N | Total loops: M
-```
-
-**Step 1 — Read the objective from council_journal.md**
-**Step 2 — Read the output (all created files, VERIFICATION_SIGN_OFF.md)**
-**Step 3 — Compare output to completion criteria**
-
-```bash
-council-orchestrator check <output_path>
-```
-
-**Step 4 — Decision:**
-
-✅ **If output fully satisfies objective:**
+**If objective FULLY satisfied:**
 ```
 ## 📦 [DELIVERY] Objective satisfied!
 ## 🎯 Objective: <objective>
 ## ✅ Iterations: N | Total loops: M
-## 📄 Output: <path to output>
-
-=== COUNCIL FINAL REPORT ===
-Objective: <objective>
-Total iterations: N
-Total loops back: M
-Stages completed: think → plan → create → review → verify
-Final status: VERIFIED — DELIVERED
+## 📄 Output: <path>
 ```
-Present the final output to the user. **STOP THE LOOP.**
+Present final output. **STOP THE LOOP.**
 
-🔄 **If output does NOT fully satisfy the objective:**
+**If NOT fully satisfied:**
 ```
 ## 🔄 [LOOP] Iteration N complete — objective not fully satisfied
-## 📋 Unsatisfied criteria: <list gaps>
-## 💡 Learnings from this iteration: <what was learned>
+## 📋 Unsatisfied: <gaps>
 ## 🚀 Starting Iteration N+1 with accumulated context
 ```
 ```bash
 council-orchestrator next-iteration
 ```
-Then **GOTO MAIN LOOP step 1** — the stage is now "think" again, starting a new iteration with ALL accumulated context.
+Then **GOTO LOOP step 1** — stage is now "think" again with ALL accumulated context.
 
 ---
 
-## Context Management Protocol
+## Context Management
 
-**Context overflow silently corrupts long pipeline runs. Monitor token usage continuously.**
+When context window reaches **140,000 tokens**:
+1. `council-orchestrator compact`
+2. Run `/compact`
+3. Re-read `council_journal.md`
+4. `council-orchestrator status`
+5. Continue from indicated stage
 
-### Auto-Compaction Rule
-
-When the active window reaches **140,000 tokens**, run compaction:
-
-1. Compact the journal: `council-orchestrator compact`
-2. Run `/compact` in the Claude Code session
-3. After compacting, continue from the last checkpoint:
-   - Re-read `council_journal.md`
-   - `council-orchestrator status`
-   - Continue from the stage indicated
-
-### Never compact mid-stage
-If a sub-agent is actively working, let it finish the current atomic unit first, then compact.
+Never compact mid-sub-agent task — finish the atomic unit first.
 
 ---
 
@@ -501,49 +435,49 @@ If a sub-agent is actively working, let it finish the current atomic unit first,
 
 | # | Directive | Rule |
 |---|---|---|
-| 1 | **NEVER STOP** | No stage waits for user input; blockers resolved autonomously. Never ask "should I continue?" |
-| 2 | **GOTO STEP 1** | After every stage action, IMMEDIATELY go back to `council-orchestrator status` |
-| 3 | **Never skip review** | Every stage output reviewed by Council Head before advancing |
-| 4 | **Never silence the Critic** | Critic produces a report at Stages 1, 2, 3 — explicit "no concerns" if none |
-| 5 | **Never bundle tasks** | Each atomic task gets its own sub-agent |
-| 6 | **Never lose context** | Full history, decisions, and invocations carried through every stage. Journal is truth |
-| 7 | **Never deliver unverified** | Final output released only after Stage 5 sign-off AND delivery check |
-| 8 | **Preserve what works** | During debugging, only broken components are touched |
-| 9 | **Dual-test Stage 3** | Both implementations tested in parallel; first to pass is canonical |
-| 10 | **Create skills when needed** | Missing capability → `Skill(skill="superpowers:writing-skills")`, never improvise |
-| 11 | **Correct skill names** | `code-review` is invoked as `code-review:code-review`, not `superpowers:code-review` |
-| 12 | **Auto-compact at 140K** | Run `/compact` when context ≥ 140K tokens — never wait until overflow |
-| 13 | **Safety limit: 50 iterations** | If max_iterations reached, output summary and journal — manual intervention needed |
-| 14 | **Deadman switch** | If no progress for 30 minutes across the same stage, escalate: try radically different approach |
+| 1 | **NEVER STOP** | No user input needed. Resolve blockers autonomously. Never ask "should I continue?" |
+| 2 | **GOTO LOOP step 1** | After every stage action, IMMEDIATELY go back to status check |
+| 3 | **TDD always** | NO production code without a failing test first. Write code first? Delete it. |
+| 4 | **Verify before claiming** | NO "it works" without fresh command output. Run the command, read the output. |
+| 5 | **Root cause before fix** | NO fix without investigation first. Symptom fixes are failure. |
+| 6 | **Never silence Critic** | Critic must report at Stages 1, 2, 3. Explicit "no concerns" if none. |
+| 7 | **Never bundle tasks** | Each atomic task gets its own sub-agent. One behavior per test. |
+| 8 | **Never lose context** | Journal is truth. Full history carried through every stage. |
+| 9 | **Never deliver unverified** | Only after Stage 5 sign-off AND delivery check pass. |
+| 10 | **Dual-test Stage 3** | Run spec review THEN code quality review. Both must pass. |
+| 11 | **Create missing capabilities** | Don't improvise. Write the pattern as a skill. |
+| 12 | **Auto-compact at 140K** | Run /compact when context ≥ 140K. Never wait until overflow. |
+| 13 | **Safety limit: 50 iterations** | Journal preserved if hit. Manual intervention needed. |
+| 14 | **Deadman switch** | 10+ loops on same stage? Radically change approach. |
 
 ---
 
-## Announcement Protocol
+## Embedded Skills — Quick Reference
 
-**Every agent MUST print announcements before and after every skill invocation, sub-agent dispatch, and model call. Silence is forbidden.**
+This file IS the complete superpower library. All 14 patterns are embedded above in their respective stages. Cross-reference:
 
-| Action | Format |
-|---|---|
-| Entering a stage | `## 🔵 [Stage N — NAME] Invoking: \`skill-name\` | Agent: Role` |
-| Stage complete | `## ✅ [Stage N — NAME] Complete | → Next: Stage N+1` |
-| Critic starts | `## 🔍 [Stage N — Critic] Reviewing in parallel` |
-| Critic done | `## ✅ [Stage N — Critic] Report ready | Concerns: <count or "none">` |
-| Sub-agent dispatched | `## 🚀 [Stage N] Sub-agent: Role | Task: <brief>` |
-| Error / recall | `## ❌ [Stage N] Issue | Recall: Agent | Reason: <brief>` |
-| Loop back | `## 🔄 [Stage N] Looping back to Stage M | Reason: <brief>` |
-| GOTO loop top | `## 🔄 [LOOP] Stage done — GOTO step 1 | Next: council-orchestrator status` |
-| New iteration | `## 🔄 [NEW ITERATION] Iteration N+1 starting | Stage: think` |
-| Delivery | `## 📦 [DELIVERY] Objective satisfied! | Iterations: N | Loops: M` |
+| Look For | Stage | Pattern Name | IRON LAW |
+|---|---|---|---|
+| Exploring ideas, comparing architectures | 1 — THINK | Brainstorming | No implementation without design approval |
+| Breaking down work into tasks | 2 — PLAN | Writing Plans | No TBD/TODO/placeholders. Every step has real code. |
+| Isolating work | 2 — PLAN | Git Worktrees | Work in isolation. No worktree on main branch. |
+| Running independent tasks concurrently | 3 — CREATE | Parallel Dispatch | Independent domains only. No shared state. |
+| Task-by-task execution | 3 — CREATE | Subagent-Driven Dev | Fresh subagent per task. Two-stage review after each. |
+| Writing code that works | 3 — CREATE | TDD | NO production code without a failing test first. |
+| Missing capability during build | 3 — CREATE | Writing Skills | Write the pattern. Don't improvise. |
+| Reviewing code quality | 4 — REVIEW | Code Review | Pre-review checklist before ANY review begins. |
+| Pre-review checklist | 4 — REVIEW | Requesting Review | Get git SHAs. Dispatch reviewer. Act on feedback. |
+| Responding to feedback | 4 — REVIEW | Receiving Review | Verify before implementing. Push back if wrong. |
+| Fixing bugs | 4 — REVIEW | Systematic Debugging | No fixes without root cause investigation first. |
+| Confirming fixes | 4 — REVIEW & 5 | Verification Before Completion | No claims without fresh command output. |
+| Merging, PR, finishing | 5 — VERIFY | Finishing Branch | Verify tests first. Then present options. |
 
 ---
 
 ## Activation
 
-On receiving any objective:
+1. **Announce:** `## 🔵 [Init] Council starting — all 14 patterns embedded inline, zero external dependencies`
+2. **Initialize:** `council-orchestrator init "<full objective>"`
+3. **ENTER MAIN LOOP** — `council-orchestrator status`
 
-1. **Announce:** `## 🔵 [Init] Invoking: \`using-superpowers\` | Loading skills system`
-2. **Execute:** `Skill(skill="using-superpowers")` — loads the skills system
-3. **Initialize:** `council-orchestrator init "<objective>"`
-4. **ENTER MAIN LOOP** (see above) — start with `council-orchestrator status`
-
-**The council is active. The loop is turning. Awaiting the objective — or already executing.**
+**The council is active. All patterns are built in. The loop is turning.**

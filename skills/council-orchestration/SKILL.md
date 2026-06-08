@@ -1,11 +1,13 @@
 ---
 name: council-orchestration
-description: Fully self-contained autonomous autoresearch loop — Think→Plan→Create→Review→Verify, iterates until objective satisfied. ALL superpower skills embedded inline, zero external dependencies.
+description: Fully self-contained autonomous autoresearch loop — Think→Plan→Create→Review→Verify, iterates until objective satisfied. ALL superpower skills embedded inline, zero external dependencies. Includes live model discovery.
 ---
 
 # Council Orchestration — Fully Self-Contained Autonomous Loop
 
 **Everything is built-in.** All 14 superpower patterns are embedded directly in this file. No external Skill calls needed. The council reads, applies, and loops autonomously until the objective is met.
+
+**Model reference:** All available models via proxy can be discovered live with `council-orchestrator models`.
 
 ---
 
@@ -46,7 +48,34 @@ council-orchestrator status                      # Current stage
 council-orchestrator advance <stage>             # Mark done
 council-orchestrator loopback <stage> "reason"   # Go back
 council-orchestrator next-iteration              # New iteration
+council-orchestrator models                      # Discover live model catalog
 ```
+
+---
+
+## Model Reference
+
+**Before starting a council session, run:**
+```bash
+council-orchestrator models
+```
+This writes `COUNCIL_MODELS.md` with all models available via your AI proxy at `http://127.0.0.1:4001`.
+
+### Fallback catalog (when proxy unreachable)
+
+**If you have GitHub Copilot connected:**
+- Thinker/Critic → claude-opus-4.6-1m (strongest)
+- Planner/Reviewer → claude-sonnet-4.6 (balanced)
+- Creator → gpt-5.4 or gpt-5.2
+- Verifier → claude-haiku-4.5 (cheapest) or gpt-5-mini (FREE)
+
+**If only OpenCode Zen:**
+- Thinker/Critic → deepseek-v4-pro, qwen3.7-max, kimi-k2.6
+- Planner/Reviewer → qwen3.6-plus, minimax-m2.7
+- Creator → deepseek-v4-flash, minimax-m2.7
+- Verifier → deepseek-v4-flash-free (FREE) or any free model
+
+**For multi-model orchestration,** use the sibling skill `ai-council-orchestration` which switches models per-stage.
 
 ---
 
@@ -471,13 +500,15 @@ This file IS the complete superpower library. All 14 patterns are embedded above
 | Fixing bugs | 4 — REVIEW | Systematic Debugging | No fixes without root cause investigation first. |
 | Confirming fixes | 4 — REVIEW & 5 | Verification Before Completion | No claims without fresh command output. |
 | Merging, PR, finishing | 5 — VERIFY | Finishing Branch | Verify tests first. Then present options. |
+| **Model discovery** | **Step 0** | **Live Model Catalog** | **Run `council-orchestrator models` before starting** |
 
 ---
 
 ## Activation
 
-1. **Announce:** `## 🔵 [Init] Council starting — all 14 patterns embedded inline, zero external dependencies`
-2. **Initialize:** `council-orchestrator init "<full objective>"`
-3. **ENTER MAIN LOOP** — `council-orchestrator status`
+1. **Model discovery:** `council-orchestrator models`
+2. **Announce:** `## 🔵 [Init] Council starting — all 14 patterns embedded inline, zero external dependencies`
+3. **Initialize:** `council-orchestrator init "<full objective>"`
+4. **ENTER MAIN LOOP** — `council-orchestrator status`
 
 **The council is active. All patterns are built in. The loop is turning.**

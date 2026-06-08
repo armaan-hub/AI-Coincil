@@ -1,127 +1,253 @@
 ---
 name: ai-council-orchestration
-description: Multi-model autonomous loop through Think→Plan→Create→Review→Verify — ALL 14 superpower patterns embedded inline, zero external dependencies. Uses specialized models per stage.
+description: Multi-model autonomous loop through Think→Plan→Create→Review→Verify — uses the best model per stage from ALL connected providers. Live auto-discovery of available models.
 ---
 
-# AI Council Orchestration — Multi-Model, Fully Self-Contained
+# AI Council Orchestration — Multi-Model, All Providers
 
-**Everything is built-in.** All 14 superpower patterns are embedded directly in this file. Each stage uses a specialized model plus the relevant embedded pattern. No external Skill calls needed.
+**Every stage uses the best available model for its role.** Model catalog is auto-discovered at runtime — no hardcoded model names that go stale. Works with GitHub Copilot, OpenCode Zen, Nvidia NIM, Ollama, Gemini, OpenAI, Groq, OpenRouter, and official Claude.
 
-## Council Structure
+## Quick Start
 
-| Agent | Model | Role |
+```bash
+council-orchestrator models                   # Step 0: discover available models
+council-orchestrator init "<your objective>"   # Step 1: start council
+council-orchestrator status                    # Step 2: check stage
+```
+
+Then enter the loop below.
+
+## Model Discovery (Step 0)
+
+**Before entering the main loop, run:**
+```bash
+council-orchestrator models
+```
+This queries `http://127.0.0.1:4001/v1/models` live and writes `COUNCIL_MODELS.md` with:
+- All available models grouped by provider
+- Recommended model for each council role
+- Live indicators (⚡ = connected now)
+
+If the proxy isn't running, fall back to the embedded catalog below.
+
+## Role-to-Model Mapping (Live)
+
+| Role | Best Picks (in priority order) | Selection Strategy |
 |---|---|---|
-| **Thinker** | Claude Opus 4.8 | Deep reasoning, ideation |
-| **Planner** | Claude Sonnet 4.6 | Task decomposition |
-| **Creator** | GPT-5 or Claude Opus | Implementation + TDD |
-| **Critic** | Claude Opus 4.8 | Adversarial review |
-| **Reviewer** | Claude Sonnet 4.6 | Code review |
-| **Verifier** | Claude Haiku 4.5 (fast) | Final verification |
+| **Thinker** (deep reasoning) | copilot/claude-opus-4.6-1m → opencode/qwen3.7-max → opencode/deepseek-v4-pro → opencode/kimi-k2.6 | Strongest analytical model available |
+| **Planner** (task decomposition) | copilot/claude-sonnet-4.6 → opencode/qwen3.6-plus → opencode/minimax-m2.7 | Best at structured planning |
+| **Creator** (code + TDD) | copilot/gpt-5.4 → opencode/deepseek-v4-flash → opencode/minimax-m2.7 → copilot/grok-code-fast-1 | Best code generation available |
+| **Critic** (adversarial review) | copilot/claude-sonnet-4.6 → opencode/deepseek-v4-pro → opencode/kimi-k2.6 | Strong at finding flaws |
+| **Reviewer** (code review) | copilot/claude-sonnet-4.6 → opencode/qwen3.6-plus → opencode/minimax-m2.5 | Balanced review quality |
+| **Verifier** (fast checks) | copilot/claude-haiku-4.5 → copilot/gpt-5-mini → opencode/deepseek-v4-flash-free | Fast & cheap, uses FREE tier if available |
+
+**Selection rule:** Pick the first model from the priority list that is currently connected (⚡ in `council-orchestrator models` output). If none of the top picks are available, use **any connected model** — don't stall.
+
+---
+
+## Embedded Model Catalog (Fallback)
+
+If the proxy is unreachable, use this static reference:
+
+### GitHub Copilot (connected ✅)
+| Model ID | Capabilities | Best For |
+|---|---|---|
+| copilot/claude-opus-4.6-1m | Vision, 15x premium | ★ Thinker, Critic |
+| copilot/claude-sonnet-4.6 | Vision | ★ Planner, Reviewer, Critic |
+| copilot/claude-sonnet-4.5 | Vision | Reviewer, Planner |
+| copilot/claude-haiku-4.5 | Vision, 0.33x cost | ★ Verifier |
+| copilot/gpt-5.4 | Vision | ★ Creator |
+| copilot/gpt-5.2 | Vision | Creator |
+| copilot/gpt-5-mini | Vision, **FREE** | Verifier, Critic, fallback |
+| copilot/grok-code-fast-1 | Fast coding | Creator (fast path) |
+
+### OpenCode Zen (always available ✅)
+| Model ID | Context | Best For |
+|---|---|---|
+| opencode/minimax-m3 | 128K | All-rounder |
+| opencode/minimax-m2.7 | **1M ctx** | ★ Planner (large codebases) |
+| opencode/minimax-m2.5 | **1M ctx** | Large context tasks |
+| opencode/qwen3.7-max | 128K | ★ Thinker, Creator |
+| opencode/qwen3.7-plus | 128K | Creator |
+| opencode/qwen3.6-plus | 131K | ★ Planner, Reviewer |
+| opencode/qwen3.5-plus | 131K | All-rounder |
+| opencode/kimi-k2.6 | 131K | ★ Thinker, Critic |
+| opencode/kimi-k2.5 | 131K | Thinker, Critic |
+| opencode/deepseek-v4-pro | 65K | ★ Thinker, Critic |
+| opencode/deepseek-v4-flash | 65K | ★ Creator (fast) |
+| opencode/glm-5.1 | 128K | All-rounder |
+| opencode/glm-5 | 128K | All-rounder |
+| opencode/mimo-v2.5-pro | 262K | Large context |
+| opencode/mimo-v2.5 | 262K | Large context |
+| opencode/mimo-v2-pro | 65K | General |
+| opencode/mimo-v2-omni | 65K | General |
+| opencode/hy3-preview | 131K | Preview |
+
+### OpenCode Zen — FREE tier (always available ✅)
+| Model ID | Best For |
+|---|---|
+| opencode/deepseek-v4-flash-free | ★ Verifier, fallback Creator |
+| opencode/mimo-v2.5-free | Verifier, fallback |
+| opencode/minimax-m3-free | Verifier, fallback |
+| opencode/nemotron-3-super-free | Verifier, fallback |
+
+### Nvidia NIM (if connected)
+meta/llama-3.3-70b-instruct, meta/llama-3.1-8b-instruct, nvidia/llama-3.1-nemotron-70b-instruct, nvidia/nemotron-3-ultra-550b-a55b, mistralai/mistral-7b-instruct-v0.3
+
+### Ollama (local, if running)
+qwen3:8b, qwen3:14b, llama3.3:70b
+
+### Google Gemini (if connected)
+gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash
+
+### OpenAI (if connected)
+gpt-4o, gpt-4o-mini, o3-mini, o4-mini, gpt-4.1, codex-mini-latest
+
+### Groq (if connected)
+llama-3.3-70b-versatile, llama-3.1-8b-instant, deepseek-r1-distill-llama-70b, mixtral-8x7b, gemma2-9b-it
+
+### OpenRouter (if connected)
+google/gemma-3-27b-it:free, meta-llama/llama-3.3-70b-instruct:free, deepseek/deepseek-r1:free, qwen/qwen3-8b:free
+
+### Claude (Anthropic, official — if not using proxy)
+claude-sonnet-4-6, claude-sonnet-4-5, claude-haiku-4-5, claude-opus-4-7, claude-opus-4-6, claude-opus-4-5
+
+---
 
 ## Architecture
 
 ```
-LOOP:
-  1. council-orchestrator status          ← check current stage
-  2. Switch model to match stage           ← use best model for role
-  3. Execute stage with embedded pattern   ← no external Skill calls
-  4. GOTO step 1                           ← unconditional
+STEP 0: council-orchestrator models     ← discover available models (live)
 
-BREAK ONLY when objective met or safety limit hit.
+LOOP:
+  1. council-orchestrator status        ← check current stage
+  2. Select best model for stage         ← pick from connected providers
+  3. Execute stage handler               ← uses embedded patterns below
+  4. council-orchestrator advance/loopback ← update state
+  5. GOTO step 1                        ← UNCONDITIONAL
+
+BREAK ONLY when:
+  - __delivery_check__ says done → DELIVER
+  - __maxed_out__ safety limit → REPORT
 ```
 
-## Stage 1 — THINK (Claude Opus 4.8)
+## Council Structure
+
+| Agent | Role | Model Selection Strategy |
+|---|---|---|
+| **Thinker** | Deep reasoning, ideation | Pick strongest analytical model connected |
+| **Planner** | Task decomposition, file mapping | Best at structured breakdown |
+| **Creator** | Implementation + TDD | Best code generator connected |
+| **Critic** | Adversarial review | Strong analysis, find flaws |
+| **Reviewer** | Code review | Balanced, thorough |
+| **Verifier** | Fast final verification | Fastest/cheapest connected |
+
+---
+
+## Stage 1 — THINK
 
 **Embedded: Brainstorming Pattern**
 
-1. Switch to Claude Opus 4.8
-2. Explore project context.
-3. Propose 2-3 architectures with trade-offs.
-4. Stress-test assumptions: what could be false?
-5. Spawn Thinker sub-agent → `THOUGHT_REPORT.md`
-6. Spawn Critic sub-agent → `CRITIQUE_REPORT.md` (adversarial: "assume this is wrong, prove it")
-7. If concerns → `council-orchestrator loopback think "<reason>"` → **GOTO LOOP step 1**
-8. If clear → `council-orchestrator advance think "approved"` → **GOTO LOOP step 1**
+**Model: Strongest analytical model connected** (priority: copilot/claude-opus-4.6-1m → opencode/qwen3.7-max → opencode/deepseek-v4-pro → opencode/kimi-k2.6 → any connected)
 
-## Stage 2 — PLAN (Claude Sonnet 4.6)
+1. **Model selection:** Run `council-orchestrator models` or check `COUNCIL_MODELS.md`. Pick the best Thinker model from what's connected.
+2. **Explore context** — project files, recent commits, existing docs.
+3. **Clarify & decompose** — break objective into independent subsystems.
+4. **Propose 2-3 architectures** with explicit trade-offs.
+5. **Stress-test:** What assumptions could be false? What could go wrong?
+6. **Spawn Thinker sub-agent** → `THOUGHT_REPORT.md`
+7. **Spawn Critic sub-agent** → `CRITIQUE_REPORT.md`
+8. If concerns → `council-orchestrator loopback think "<reason>"` → **GOTO LOOP**
+9. If clear → `council-orchestrator advance think "approved"` → **GOTO LOOP**
+
+## Stage 2 — PLAN
 
 **Embedded: Writing Plans Pattern**
 
-1. Switch to Claude Sonnet 4.6
-2. Map every file that will be changed. One responsibility per file.
-3. Decompose into bite-sized tasks. Each = one action (2-5 min).
-4. Write `TASK_EXECUTION_PLAN.md` with: tasks, files, code in steps, commands, expected output.
-5. Self-review: spec coverage? placeholders? type consistency?
-6. Spawn Critic: "Any missing success criteria? Dependencies correct?"
-7. If concerns → loopback → **GOTO LOOP step 1**
-8. If clear → advance → **GOTO LOOP step 1**
+**Model: Best planner connected** (priority: copilot/claude-sonnet-4.6 → opencode/qwen3.6-plus → opencode/minimax-m2.7 → best connected)
 
-## Stage 3 — CREATE (Claude Opus 4.8 or GPT-5)
+1. **Model selection:** Pick the best Planner model.
+2. Map every file that will be changed. One responsibility per file.
+3. Decompose into bite-sized tasks (2-5 min each).
+4. Write `TASK_EXECUTION_PLAN.md` with real code in every step.
+5. Self-review: spec coverage? placeholders? type consistency?
+6. Spawn Critic: missing criteria? dependencies correct?
+7. If concerns → loopback → **GOTO LOOP**
+8. If clear → advance → **GOTO LOOP**
+
+## Stage 3 — CREATE
 
 **Embedded: TDD + Subagent-Driven Development + Parallel Dispatch Patterns**
 
-1. Switch to strongest coding model.
-2. For EVERY task, follow strict TDD:
-   - **RED:** Write failing test first. No production code without it.
-   - **Verify RED:** Watch it fail (right reason — feature missing, not typo).
-   - **GREEN:** Minimal code to pass.
-   - **Verify GREEN:** Watch it pass. Other tests still pass.
-   - **REFACTOR:** Clean up while staying green.
-3. Dispatch fresh sub-agents per independent task. Each gets full context (not reading plan file).
-4. Two-stage review after each task: spec compliance → code quality.
-5. For independent tasks with no shared state: dispatch in parallel.
-6. If missing capability → write the pattern as a skill.
-7. If done → advance → **GOTO LOOP step 1**
-8. If issues → loopback → **GOTO LOOP step 1**
+**Model: Best coder connected** (priority: copilot/gpt-5.4 → opencode/deepseek-v4-flash → opencode/minimax-m2.7 → copilot/grok-code-fast-1 → any connected)
 
-## Stage 4 — REVIEW & TEST (Claude Sonnet 4.6)
+1. **Model selection:** Pick the best Creator model.
+2. **TDD IRON LAW:** No production code without a failing test first.
+3. RED → Verify RED → GREEN → Verify GREEN → REFACTOR
+4. Dispatch fresh sub-agents per independent task.
+5. Two-stage review per task: spec compliance → code quality.
+6. Parallel dispatch for independent domains.
+7. If missing capability → write pattern as skill.
+8. If done → advance → **GOTO LOOP**
+9. If issues → loopback → **GOTO LOOP**
+
+## Stage 4 — REVIEW & TEST
 
 **Embedded: Code Review + Systematic Debugging + Verification Patterns**
 
-1. Switch to Claude Sonnet 4.6.
-2. Pre-review: get git SHAs, summary of what was built.
-3. Spawn ALL council roles to review simultaneously (logic, security, completeness).
-4. Evaluate feedback: READ → UNDERSTAND → VERIFY → RESPOND → IMPLEMENT.
-5. If flaws found — apply Systematic Debugging:
-   - **Phase 1:** Root cause investigation (read errors, reproduce, check changes, trace data flow)
-   - **Phase 2:** Pattern analysis (find working examples, compare, identify differences)
-   - **Phase 3:** Hypothesis and testing (single hypothesis, minimal test)
-   - **Phase 4:** Fix (failing test → single fix → verify → no regressions)
-   - **IRON LAW:** No fixes without root cause investigation first.
-6. Fix → re-verify → loopback review → **GOTO LOOP step 1**
-7. When clean → advance → **GOTO LOOP step 1**
+**Model: Best reviewer connected** (priority: copilot/claude-sonnet-4.6 → opencode/deepseek-v4-pro → opencode/qwen3.6-plus → any connected)
 
-## Stage 5 — VERIFY & DELIVER (Claude Haiku 4.5)
+1. **Model selection:** Pick the best Reviewer model.
+2. Pre-review: get SHAs, summary of what was built.
+3. Spawn ALL council roles to review simultaneously.
+4. If flaws → Systematic Debugging (4-phase: root cause → pattern → hypothesis → fix)
+5. **IRON LAW:** No fixes without root cause investigation.
+6. Fix → re-verify → loopback review → **GOTO LOOP**
+7. When clean → advance → **GOTO LOOP**
+
+## Stage 5 — VERIFY & DELIVER
 
 **Embedded: Verification Before Completion + Finishing Branch Patterns**
 
-1. Switch to Claude Haiku 4.5 (fast verification).
-2. **IRON LAW:** No "it works" without fresh verification output. Run the FULL command, read the output.
-3. Run full test suite, build, integration checks.
-4. Spawn completeness verifier: does every requirement from the objective check out?
+**Model: Fastest/cheapest connected** (priority: copilot/claude-haiku-4.5 → copilot/gpt-5-mini → opencode/deepseek-v4-flash-free → any FREE model)
+
+1. **Model selection:** Pick the cheapest available model — verification is simple checks.
+2. **IRON LAW:** No "it works" without fresh verification output.
+3. Run full test suite, build, integration.
+4. Spawn completeness verifier.
 5. Produce `VERIFICATION_SIGN_OFF.md`.
-6. If verified → advance → **GOTO LOOP step 1**
-7. If not → loopback to appropriate stage → **GOTO LOOP step 1**
+6. If verified → advance → **GOTO LOOP**
+7. If not → loopback to appropriate stage → **GOTO LOOP**
 
 ## Delivery Check
 
+When stage is `__delivery_check__`:
 - If objective satisfied → DELIVER. **STOP THE LOOP.**
-- If not → `council-orchestrator next-iteration` → **GOTO LOOP step 1** (back to Think with learnings)
+- If not → `council-orchestrator next-iteration` → **GOTO LOOP**
 
 ## Standing Directives
 
 | # | Directive |
 |---|---|
-| 1 | **NEVER STOP** — no asking for permission. Resolve autonomously. |
-| 2 | **GOTO LOOP step 1** — after every action, back to status check. |
-| 3 | **TDD always** — no code without failing test first. |
-| 4 | **Verify before claiming** — run command, read output, then claim. |
-| 5 | **Root cause before fix** — no fixes without investigation. |
-| 6 | **Safety limit: 50 iterations** — journal preserved if hit. |
+| 1 | **NEVER STOP** — no asking for permission |
+| 2 | **GOTO LOOP step 1** — after every action |
+| 3 | **TDD always** — no code without failing test |
+| 4 | **Verify before claiming** — run command, read output |
+| 5 | **Root cause before fix** — no fixes without investigation |
+| 6 | **Safety limit: 50 iterations** |
+| 7 | **Auto-discover models** — run `council-orchestrator models` at session start |
 
 ## Activation
 
-1. `council-orchestrator init "<objective>"`
-2. **ENTER MAIN LOOP** — `council-orchestrator status`
-3. Switch model per stage. Execute with embedded patterns.
-4. **GOTO LOOP step 1** after every action.
+```bash
+# Step 0 — Discover models (run once per session)
+council-orchestrator models
+
+# Step 1 — Initialize
+council-orchestrator init "<full objective>"
+
+# Step 2 — Enter loop
+council-orchestrator status
+```
+
+The council reads `COUNCIL_MODELS.md`, picks the best model per role from what's actually connected, and executes each stage with its embedded pattern. The loop turns until done.

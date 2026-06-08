@@ -12,15 +12,15 @@ Usage (as invoked by the AI during orchestration):
     python orchestrator.py advance <stage> <outcome>   # Mark stage complete
     python orchestrator.py loopback <stage> <reason>   # Go back to a stage
     python orchestrator.py check <output_path>         # Check if output satisfies objective
-    python orchestrator.jsn compact                    # Compact the journal
-    python orchestrator.jsn snapshot                   # Print current state as JSON
-    python orchestrator.jsn history                    # Print full iteration history
+    python orchestrator.py models                      # Fetch live model catalog from proxy
 """
 
 import json
 import os
 import sys
 import subprocess
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -308,6 +308,286 @@ def status() -> dict:
     return state
 
 
+PROXY_URL = "http://127.0.0.1:4001"
+MODELS_CACHE = "council_models.md"
+
+
+def fetch_models() -> dict:
+    """Fetch live model list from the AI proxy and write COUNCIL_MODELS.md."""
+    result = {"providers": {}, "all": []}
+    try:
+        req = urllib.request.Request(f"{PROXY_URL}/v1/models", method="GET")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode())
+    except Exception as e:
+        print(f"⚠️  Proxy not reachable at {PROXY_URL}/v1/models: {e}")
+        print("   Using embedded model catalog from SKILL.md instead.")
+        return result
+
+    raw = data.get("data", [])
+    provider_order = [
+        ("copilot", "GitHub Copilot", [
+            ("claude-opus-4.6-1m", "Vision", "15x premium — strongest reasoning"),
+            ("claude-sonnet-4.6", "Vision", "Balanced, great for planning/review"),
+            ("claude-sonnet-4.5", "Vision", "Good all-rounder"),
+            ("claude-haiku-4.5", "Vision", "0.33x — cheap, fast, good verifier"),
+            ("gpt-5.4", "Vision", "Strong coder (OpenAI)"),
+            ("gpt-5.2", "Vision", "Good coder (OpenAI)"),
+            ("gpt-5-mini", "Vision", "FREE — versatile, good for verifier/critic"),
+            ("grok-code-fast-1", "", "Fast coding assistant (xAI)"),
+        ]),
+        ("opencode", "OpenCode Zen (free tiers)", [
+            ("minimax-m3", "", "Latest MiniMax — strong all-rounder"),
+            ("minimax-m2.7", "", "1M context — best for large codebases"),
+            ("minimax-m2.5", "", "1M context"),
+            ("kimi-k2.6", "", "Strong reasoning (Moonshot AI)"),
+            ("kimi-k2.5", "", "Strong reasoning (Moonshot AI)"),
+            ("glm-5.1", "", "Latest GLM (Zhipu AI)"),
+            ("glm-5", "", "GLM (Zhipu AI)"),
+            ("deepseek-v4-pro", "", "DeepSeek Pro — strong reasoning"),
+            ("deepseek-v4-flash", "", "DeepSeek Flash — fast generation"),
+            ("qwen3.7-max", "", "Latest Qwen max — strongest Alibaba model"),
+            ("qwen3.7-plus", "", "Qwen 3.7 plus"),
+            ("qwen3.6-plus", "", "Qwen 3.6 plus — balanced"),
+            ("qwen3.5-plus", "", "Qwen 3.5 plus"),
+            ("mimo-v2-pro", "", "Mimo v2 Pro"),
+            ("mimo-v2-omni", "", "Mimo v2 Omni"),
+            ("mimo-v2.5-pro", "", "262K context — Mimo v2.5 Pro"),
+            ("mimo-v2.5", "", "Mimo v2.5 — 262K context"),
+            ("hy3-preview", "", "Hyperbolic YI-3 preview"),
+            ("big-pickle", "", ""),
+        ]),
+        ("opencode-free", "OpenCode Zen (FREE)", [
+            ("deepseek-v4-flash-free", "", "FREE — fast, good for verifier"),
+            ("mimo-v2.5-free", "", "FREE"),
+            ("minimax-m3-free", "", "FREE"),
+            ("nemotron-3-super-free", "", "FREE"),
+
+        ]),
+        ("nvidia", "Nvidia NIM", [
+            ("meta/llama-3.3-70b-instruct", "", "Llama 3.3 70B"),
+            ("meta/llama-3.1-8b-instruct", "", "Llama 3.1 8B (fast, small)"),
+            ("nvidia/llama-3.1-nemotron-70b-instruct", "", "Nemotron 70B"),
+            ("nvidia/nemotron-3-ultra-550b-a55b", "", "Nemotron 3 Ultra"),
+            ("mistralai/mistral-7b-instruct-v0.3", "", "Mistral 7B (fast, small)"),
+        ]),
+        ("ollama", "Ollama (local)", [
+            ("qwen3:8b", "", "Qwen 3 8B (local)"),
+            ("qwen3:14b", "", "Qwen 3 14B (local)"),
+            ("llama3.3:70b", "", "Llama 3.3 70B (local)"),
+        ]),
+        ("groq", "Groq (if connected)", [
+            ("llama-3.3-70b-versatile", "", "Llama 3.3 70B via Groq"),
+            ("llama-3.1-8b-instant", "", "Llama 3.1 8B via Groq (fast)"),
+            ("deepseek-r1-distill-llama-70b", "", "DeepSeek R1 via Groq"),
+            ("mixtral-8x7b", "", "Mixtral MoE via Groq"),
+            ("gemma2-9b-it", "", "Google Gemma 2 via Groq"),
+        ]),
+        ("gemini", "Google Gemini (if connected)", [
+            ("gemini-2.5-pro", "", "Google Gemini 2.5 Pro"),
+            ("gemini-2.5-flash", "", "Google Gemini 2.5 Flash"),
+            ("gemini-2.0-flash", "", "Google Gemini 2.0 Flash"),
+            ("gemini-1.5-pro", "", "Google Gemini 1.5 Pro"),
+            ("gemini-1.5-flash", "", "Google Gemini 1.5 Flash"),
+        ]),
+        ("openai", "OpenAI (if connected)", [
+            ("gpt-4o", "", "OpenAI GPT-4o"),
+            ("gpt-4o-mini", "", "OpenAI GPT-4o mini"),
+            ("o3-mini", "", "OpenAI o3-mini"),
+            ("o4-mini", "", "OpenAI o4-mini"),
+            ("gpt-4.1", "", "OpenAI GPT-4.1"),
+            ("codex-mini-latest", "", "OpenAI Codex mini"),
+        ]),
+        ("openrouter", "OpenRouter (if connected)", [
+            ("google/gemma-3-27b-it:free", "", "FREE — Gemma 3 via OpenRouter"),
+            ("meta-llama/llama-3.3-70b-instruct:free", "", "FREE — Llama 3.3 via OpenRouter"),
+            ("deepseek/deepseek-r1:free", "", "FREE — DeepSeek R1 via OpenRouter"),
+            ("qwen/qwen3-8b:free", "", "FREE — Qwen 3 8B via OpenRouter"),
+        ]),
+        ("anthropic", "Claude (Anthropic, official)", [
+            ("claude-sonnet-4-6", "", "Latest Sonnet"),
+            ("claude-sonnet-4-5", "", "Sonnet 4.5"),
+            ("claude-haiku-4-5", "", "Fast Haiku"),
+            ("claude-opus-4-7", "", "Most capable Opus"),
+            ("claude-opus-4-6", "", "Opus 4.6"),
+            ("claude-opus-4-5", "", "Opus 4.5"),
+        ]),
+    ]
+
+    # Build provider groups from live data
+    live_groups = {}
+    live_models = set()
+    for m in raw:
+        mid = m.get("id", "")
+        if not mid:
+            continue
+        live_models.add(mid)
+        # Normalize provider from owned_by to a consistent key
+        owner_norm = (m.get("owned_by", "") or "").split("[")[0].strip().lower()
+        if mid.startswith("copilot/") or "github-copilot" in owner_norm or "github" in owner_norm:
+            live_groups.setdefault("github-copilot", []).append(mid)
+        elif mid.startswith("opencode/"):
+            live_groups.setdefault("opencode", []).append(mid)
+        elif "ollama" in owner_norm or mid.startswith("qwen3:") or mid.startswith("llama3.3:"):
+            live_groups.setdefault("ollama", []).append(mid)
+        elif "nvidia" in owner_norm or mid.startswith("meta/") or mid.startswith("nvidia/") or mid.startswith("mistralai/"):
+            live_groups.setdefault("nvidia", []).append(mid)
+        elif "gemini" in owner_norm:
+            live_groups.setdefault("gemini", []).append(mid)
+        elif "openai" in owner_norm:
+            live_groups.setdefault("openai", []).append(mid)
+        elif "groq" in owner_norm:
+            live_groups.setdefault("groq", []).append(mid)
+        elif "openrouter" in owner_norm:
+            live_groups.setdefault("openrouter", []).append(mid)
+        else:
+            live_groups.setdefault("opencode", []).append(mid)
+
+    # Mark which providers are alive
+    alive_providers = set()
+    for grp, mids in live_groups.items():
+        if mids:
+            alive_providers.add(grp)
+
+    # Also check which additional providers might be set up via config
+    alive_providers.add("opencode-free")  # always available
+    alive_providers.add("groq")
+    alive_providers.add("gemini")
+    alive_providers.add("openai")
+    alive_providers.add("openrouter")
+    alive_providers.add("anthropic")  # official claude
+
+    # Store live groups for show_models to use
+    result["live_groups"] = live_groups
+
+    # Write the models catalog file
+    lines = [
+        "# Council Model Catalog",
+        "",
+        f"*Auto-generated: {_now()}*",
+        f"*Proxy: {PROXY_URL}*",
+        "",
+        "## Available Models by Provider",
+        "",
+        "| Council Role | Recommended Model(s) | Why |",
+        "|---|---|---|",
+        "| **Thinker** | copilot/claude-opus-4.6-1m, opencode/qwen3.7-max, opencode/deepseek-v4-pro, opencode/kimi-k2.6 | Deep reasoning, strong analytical capability",
+        "| **Planner** | copilot/claude-sonnet-4.6, opencode/qwen3.6-plus, opencode/minimax-m2.7 | Task decomposition, file mapping",
+        "| **Creator** | copilot/gpt-5.4, opencode/deepseek-v4-flash, opencode/minimax-m2.7, copilot/grok-code-fast-1 | Code generation, TDD implementation",
+        "| **Critic** | copilot/claude-sonnet-4.6, opencode/deepseek-v4-pro, opencode/kimi-k2.6 | Adversarial review, edge case analysis",
+        "| **Reviewer** | copilot/claude-sonnet-4.6, opencode/qwen3.6-plus, opencode/minimax-m2.5 | Code quality, completeness check",
+        "| **Verifier** | copilot/claude-haiku-4.5, copilot/gpt-5-mini, opencode/deepseek-v4-flash-free | Fast verification, cheap, good enough",
+        "",
+        "### Full Model Catalog",
+        "",
+    ]
+
+    for key, label, model_list in provider_order:
+        tag = " ✅" if key in alive_providers else " 🔌 (needs connect)"
+        lines.append(f"### {label}{tag}")
+        lines.append("")
+        lines.append("| Model ID | Notes |")
+        lines.append("|---|---|")
+        for mid, extra, note in model_list:
+            full_id = f"copilot/{mid}" if key == "copilot" and "/" not in mid else mid
+            if key == "opencode":
+                full_id = f"opencode/{mid}"
+            elif key == "opencode-free":
+                full_id = f"opencode/{mid}"
+                mid_label = f"opencode/{mid}"
+                lines.append(f"| {mid_label} | {note} |")
+                continue
+            elif key == "nvidia" and "/" in mid:
+                full_id = mid
+                mid_label = mid
+                lines.append(f"| {mid_label} | {note} |")
+                continue
+            elif key in ("anthropic", "groq", "openai"):
+                full_id = f"{key}/{mid}" if key != "openai" else mid
+                lines.append(f"| {full_id} | {note} |")
+                continue
+            mid_label = full_id
+            live = " ⚡" if full_id in live_models else ""
+            lines.append(f"| {mid_label} | {note}{live} |")
+        lines.append("")
+
+    lines.extend([
+        "",
+        "---",
+        "",
+        "## Live Model Discovery",
+        "",
+        "To refresh this catalog with live data from the proxy:",
+        "```bash",
+        "council-orchestrator models",
+        "```",
+        "",
+        "## Role-to-Model Mapping Strategy",
+        "",
+        "At council init, pick the best AVAILABLE model per role:",
+        "",
+        "1. Check which providers are connected (`/provider status`)",
+        "2. For each role, pick the strongest model from a connected provider",
+        "3. If GitHub Copilot is connected — use its Opus/Sonnet/Haiku for think/review/verify",
+        "4. If only OpenCode — use deepseek-v4-pro for thinking, qwen3.7-max/plus for creation",
+        "5. If budget conscious — use FREE models for verifier/critic roles",
+        "6. Fallback: any connected model is better than no model",
+        "",
+    ])
+
+    content = "\n".join(lines)
+    try:
+        with open(MODELS_CACHE, "w") as f:
+            f.write(content)
+        print(f"📋 Model catalog written to {MODELS_CACHE}")
+    except Exception:
+        pass
+
+    result["all"] = raw
+    # Build result providers from the normalized live_groups
+    prov_label_map = {
+        "github-copilot": "GitHub Copilot",
+        "opencode": "OpenCode Zen",
+        "nvidia": "Nvidia NIM",
+        "ollama": "Ollama (local)",
+        "gemini": "Google Gemini",
+        "openai": "OpenAI",
+        "groq": "Groq",
+        "openrouter": "OpenRouter",
+    }
+    for grp, mids in live_groups.items():
+        lbl = prov_label_map.get(grp, grp)
+        result["providers"][lbl] = mids
+
+    return result
+
+
+def show_models() -> None:
+    """Print live model list from proxy."""
+    result = fetch_models()
+    if not result["all"]:
+        print("❌ No models fetched. Is the proxy running?")
+        print(f"   Start: cd ~/Claude-Opencode-Ollama && node opencode-proxy-server.js &")
+        return
+
+    print(f"\n{'='*60}")
+    print(f"  🤖 COUNCIL MODEL CATALOG")
+    print(f"  {'='*60}")
+    print(f"  Live models from proxy: {len(result['all'])}")
+    print(f"  Providers: {len(result['providers'])}")
+    print(f"{'='*60}")
+
+    for label in ["GitHub Copilot", "OpenCode Zen", "Nvidia NIM", "Ollama (local)", "Google Gemini", "OpenAI", "Groq", "OpenRouter"]:
+        models = result["providers"].get(label, [])
+        if not models:
+            continue
+        print(f"\n  📦 {label} ({len(models)} models)")
+        for m in sorted(models):
+            print(f"     {m}")
+    print(f"\n{'='*60}\n")
+    print(f"💡 Role recommendations also written to {MODELS_CACHE}")
+
+
 def compact() -> None:
     """Compact the journal by removing redundant entries."""
     state = get_state()
@@ -522,6 +802,7 @@ def main():
         print("  snapshot               Print state as JSON")
         print("  history                Print iteration history")
         print("  check [path]           Check completion status")
+        print("  models                 Fetch live model catalog from proxy")
         sys.exit(1)
 
     cmd = sys.argv[1]
@@ -565,6 +846,9 @@ def main():
         path = sys.argv[2] if len(sys.argv) > 2 else None
         result = check_completion(path)
         print(json.dumps(result, indent=2))
+
+    elif cmd == "models":
+        show_models()
 
     else:
         print(f"❌ Unknown command: {cmd}")

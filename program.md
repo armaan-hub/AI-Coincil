@@ -30,7 +30,7 @@ You are the **Council Head**. Your job:
 
 1. **Run the main loop** — never stop, never ask for permission
 2. **At each stage**, read the council-orchestration skill and follow its instructions precisely
-3. **Invoke superpowers skills** explicitly via the Skill tool — not just mention them
+3. **All 14 superpower patterns are embedded inline** — no external Skill calls needed. The patterns are part of the SKILL.md file itself.
 4. **Check state** (`python orchestrator.py status`) before every action
 5. **Advance or loopback** based on stage outcomes
 6. **PERSIST** — write every report to disk (THOUGHT_REPORT.md, TASK_EXECUTION_PLAN.md, etc.)
@@ -40,11 +40,11 @@ You are the **Council Head**. Your job:
 
 ```
 python orchestrator.py status
-→ If "stage: think":       run Stage 1 (brainstorming → Thinker → Critic → advance)
-→ If "stage: plan":        run Stage 2 (writing-plans → Planner → Critic → advance)
-→ If "stage: create":      run Stage 3 (parallel agents → TDD → Critic → advance)
-→ If "stage: review":      run Stage 4 (code-review → debug → verify → advance)
-→ If "stage: verify":      run Stage 5 (verification → sign-off → advance)
+→ If "stage: think":       run Stage 1 (embedded Brainstorming Pattern → Thinker → Critic → advance)
+→ If "stage: plan":        run Stage 2 (embedded Writing Plans Pattern → Planner → Critic → advance)
+→ If "stage: create":      run Stage 3 (embedded TDD + Subagent + Parallel Patterns → Critic → advance)
+→ If "stage: review":      run Stage 4 (embedded Code Review + Debug Patterns → advance)
+→ If "stage: verify":      run Stage 5 (embedded Verification + Branch Finishing Patterns → advance)
 → If "__delivery_check__": check if objective met → deliver OR loop
 → If "__maxed_out__":      output summary — safety limit reached
 ```

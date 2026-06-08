@@ -9,9 +9,24 @@ description: Autonomous autoresearch-style loop through Think→Plan→Create→
 
 A **self-looping, never-stopping** multi-agent pipeline that cycles through 5 stages (Think → Plan → Create → Review → Verify) until the original query is fully resolved.
 
-**Inspired by Karpathy's autoresearch:** each iteration is self-contained; the loop runs autonomously without user intervention. If the output doesn't satisfy the objective, the council loops back to Stage 1 with all accumulated context and trys again.
+**Inspired by Karpathy's autoresearch:** each iteration is self-contained; the loop runs autonomously without user intervention. If the output doesn't satisfy the objective, the council loops back to Stage 1 with all accumulated context and tries again.
 
-**Core principle:** NEVER STOP. No "should I continue?" questions. No pausing for approval. Each stage invokes the appropriate **superpowers skills** explicitly via the Skill tool — not just references them. The loop keeps turning until the objective is met or the safety limit is hit.
+**Core principle:** NEVER STOP. No "should I continue?" questions. No pausing for approval. Each stage invokes the appropriate **superpowers skills** explicitly via the `Skill` tool — not just references them. The loop keeps turning until the objective is met or the safety limit is hit.
+
+## Superpowers Integration
+
+Every stage **EXPLICITLY INVOKES** superpowers skills via the `Skill` tool. Do not merely describe what a skill does — invoke it with the correct namespaced name.
+
+| Stage | Skill Invocations |
+|---|---|
+| **Init** | `Skill(skill="using-superpowers")` |
+| **1 — Think** | `Skill(skill="superpowers:brainstorming")`, then spawn Thinker + Critic sub-agents |
+| **2 — Plan** | `Skill(skill="superpowers:writing-plans")`, `Skill(skill="superpowers:executing-plans")`, `Skill(skill="superpowers:using-git-worktrees")`, spawn Planner + Critic |
+| **3 — Create** | `Skill(skill="superpowers:dispatching-parallel-agents")`, `Skill(skill="superpowers:subagent-driven-development")`, `Skill(skill="superpowers:test-driven-development")`, `Skill(skill="superpowers:writing-skills")` |
+| **4 — Review & Test** | `Skill(skill="code-review:code-review")`, `Skill(skill="superpowers:requesting-code-review")`, `Skill(skill="superpowers:receiving-code-review")`, `Skill(skill="superpowers:systematic-debugging")`, `Skill(skill="superpowers:verification-before-completion")` |
+| **5 — Verify & Deliver** | `Skill(skill="superpowers:verification-before-completion")`, `Skill(skill="superpowers:finishing-a-development-branch")` |
+
+---
 
 ## Architecture
 
@@ -19,93 +34,104 @@ A **self-looping, never-stopping** multi-agent pipeline that cycles through 5 st
 ┌─────────────────────────────────────────────────────────────────┐
 │                   MAIN ORCHESTRATION LOOP                        │
 │                                                                  │
-│  while not objective_fully_satisfied:                            │
-│    ┌──────┐   ┌──────┐   ┌──────┐   ┌──────┐   ┌──────┐        │
-│    │THINK │→  │PLAN  │→  │CREATE│→  │REVIEW│→  │VERIFY│        │
-│    │  +   │   │  +   │   │  +   │   │  &   │   │  &   │        │
-│    │CRITIC│   │CRITIC│   │CRITIC│   │ TEST │   │DELIVER│        │
-│    └──┬───┘   └──┬───┘   └──┬───┘   └──┬───┘   └──┬───┘        │
-│       │           │          │          │          │             │
-│       ◄───────────┴──────────┴──────────┴──────────┤             │
-│       │  loop back if critiqued or issues found     │             │
-│       └─────────────────────────────────────────────┘             │
-│                    │  if verify passes but objective unmet         │
-│                    └──────────────────────────────────────────┘   │
+│  LOOP (forever):                                                 │
+│    1. council-orchestrator status    ← check current stage       │
+│    2. Execute the stage handler                                   │
+│    3. council-orchestrator status    ← verify transition         │
+│    4. GOTO step 1                     ← unconditional loop       │
+│                                                                  │
+│  BREAK ONLY when:                                                │
+│    - Delivery check says objective fully satisfied → DELIVER     │
+│    - __maxed_out__ safety limit reached → REPORT                 │
+│                                                                  │
+│  ┌──────┐   ┌──────┐   ┌──────┐   ┌──────┐   ┌──────┐          │
+│  │THINK │→  │PLAN  │→  │CREATE│→  │REVIEW│→  │VERIFY│          │
+│  │  +   │   │  +   │   │  +   │   │  &   │   │  &   │          │
+│  │CRITIC│   │CRITIC│   │CRITIC│   │ TEST │   │DELIVER│          │
+│  └──┬───┘   └──┬───┘   └──┬───┘   └──┬───┘   └──┬───┘          │
+│     │           │          │          │          │               │
+│     ◄───────────┴──────────┴──────────┴──────────┤               │
+│     │  loop back via loopback if critique/issues                   │
+│     └───────────────────────────────────────────┘                 │
+│                  │  if !satisfied → next-iteration → GOTO top    │
+│                  └─────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+---
 
 ## State Management
 
 The council maintains a **`council_journal.md`** file in the working directory. This is the persistent state — read at each wakeup, written after every stage transition.
 
-**Initialize with:**
+**Initialize:**
 ```bash
-python orchestrator.py init "<your_objective>"
+council-orchestrator init "<your_objective>"
 ```
 
-**Track progress with:**
+**Track progress:**
 ```bash
-python orchestrator.py status        # Current stage, iteration, loops
-python orchestrator.py advance think  # Mark stage done, advance
-python orchestrator.py loopback think "Reason why"  # Go back to fix
-python orchestrator.py next-iteration # Start fresh iteration
-python orchestrator.py history        # Full state history
+council-orchestrator status              # Current stage, iteration, loops
+council-orchestrator advance think       # Mark stage done, advance
+council-orchestrator loopback think "reason"  # Go back to a stage
+council-orchestrator next-iteration      # Start fresh iteration
+council-orchestrator history             # Full state history
 ```
-
-## Superpowers Integration
-
-Every stage **EXPLICITLY invokes** superpowers skills via the `Skill` tool. Do not merely describe what a skill does — invoke it.
-
-| Stage | Skill Invocations |
-|---|---|
-| **Init** | `Skill(skill="using-superpowers")` |
-| **1 — Think** | `Skill(skill="superpowers:brainstorming")`, then spawn Thinker + Critic sub-agents |
-| **2 — Plan** | `Skill(skill="superpowers:writing-plans")`, spawn Planner + Critic |
-| **3 — Create** | `Skill(skill="superpowers:dispatching-parallel-agents")`, `Skill(skill="superpowers:subagent-driven-development")`, `Skill(skill="superpowers:test-driven-development")`, `Skill(skill="superpowers:writing-skills")` |
-| **4 — Review & Test** | `Skill(skill="superpowers:code-review")`, `Skill(skill="superpowers:systematic-debugging")`, `Skill(skill="superpowers:verification-before-completion")` |
-| **5 — Verify & Deliver** | `Skill(skill="superpowers:verification-before-completion")`, `Skill(skill="superpowers:finishing-a-development-branch")` |
 
 ---
 
-## The Main Loop
+## The Main Loop — CRITICAL INSTRUCTION
 
-### Activation Protocol
+This is the **only** control flow you follow after initialization. Read this section carefully — it defines how the loop works.
 
-On receiving any objective:
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        MAIN LOOP                              │
+│                                                               │
+│  LOOP:                                                        │
+│    1. Run: council-orchestrator status                        │
+│    2. Look at the "Stage:" field in the output                │
+│    3. Match it to one of:                                     │
+│       • "think"             → execute Stage 1 (THINK)         │
+│       • "plan"              → execute Stage 2 (PLAN)          │
+│       • "create"            → execute Stage 3 (CREATE)        │
+│       • "review"            → execute Stage 4 (REVIEW)        │
+│       • "verify"            → execute Stage 5 (VERIFY)        │
+│       • "__delivery_check__"→ execute DELIVERY CHECK section  │
+│       • "__maxed_out__"     → print summary, STOP             │
+│    4. After the handler finishes → GOTO step 1                │
+│       (do NOT stop, do NOT ask user, do NOT pass go)          │
+│                                                               │
+│  🔴 NEVER break out of this loop EXCEPT:                      │
+│     • Delivery check says "objective met" → deliver + STOP   │
+│     • __maxed_out__ reached → report + STOP                   │
+│                                                               │
+│  🔴 NEVER ask "should I continue?" or "is this good?"         │
+│     The answer is always YES — keep looping.                  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### What This Means In Practice
+
+When you finish Stage 1 (THINK), the skill says `advance think "approved"` — this changes the journal stage to "plan". You then **IMMEDIATELY GOTO step 1** — run `council-orchestrator status`, see "plan", and execute Stage 2.
+
+Similarly, when Stage 5 (VERIFY) passes, the stage becomes `__delivery_check__`. You go back to `council-orchestrator status`, see `__delivery_check__`, and run the Delivery Check. If the objective isn't met, you run `council-orchestrator next-iteration` and **GOTO step 1** — the stage is now "think" again.
+
+**There is no "done" between stages. There is no pause. The loop is continuous.**
+
+---
+
+## Activation Protocol
+
+When the `/council-orchestration` command is invoked:
 
 1. **Announce:** `## 🔵 [Init] Invoking: \`using-superpowers\` | Loading skills system`
 2. **Execute:** `Skill(skill="using-superpowers")` — loads and validates all superpowers
-3. **Initialize state:**
+3. **Initialize journal:**
    ```bash
-   python orchestrator.py init "<the user's full objective>"
+   council-orchestrator init "<the user's full objective>"
    ```
-4. **Read state:**
-   ```bash
-   python orchestrator.py status
-   ```
-5. **Enter the main loop** — see below
-
-### The NEVER-STOP Loop
-
-```
-python orchestrator.py status   ← check where we are
-                                   
-if stage == "think"             → execute Stage 1
-if stage == "plan"              → execute Stage 2
-if stage == "create"            → execute Stage 3
-if stage == "review"            → execute Stage 4
-if stage == "verify"            → execute Stage 5
-if stage == "__delivery_check__" → check satisfaction → deliver or loop
-if stage == "__maxed_out__"     → output summary, journal preserved
-```
-
-After each stage, call:
-```bash
-python orchestrator.py status
-```
-to see what the orchestrator says next. Follow its direction.
-
-**NEVER ask the user "should I continue?" or "is this good?"** The loop is autonomous. The answer is always "continue" until the objective is met.
+4. **Enter the MAIN LOOP** (see above) — start with `council-orchestrator status`
 
 ---
 
@@ -114,15 +140,15 @@ to see what the orchestrator says next. Follow its direction.
 ### Invoke: `brainstorming` + Spawn Thinker sub-agent + Spawn Critic sub-agent
 
 **Step 1 — Announce:**
-```
+``` 
 ## 💭 [Stage 1 — THINK] Invoking: brainstorming | Agent: Thinker
 ```
 
-**Step 2 — Invoke brainstorming skill:**
+**Step 2 — Invoke brainstorming:**
 ```
 Skill(skill="superpowers:brainstorming", args="<the objective>")
 ```
-Let the brainstorming skill load. Follow its Socratic refinement process.
+Let it load. Follow its Socratic refinement process.
 
 **Step 3 — Spawn Thinker sub-agent:**
 ```
@@ -145,7 +171,7 @@ You are the Thinker in an AI Council. Your job:
 **Step 4 — Spawn Critic sub-agent in parallel:**
 ```
 Agent(description="Critic challenge thought report", prompt="""
-You are the Critic in an AI Council. Read the Thought Report being produced.
+You are the Critic in an AI Council. Read the Thought Report as it's produced.
 Your adversarial mandate — assume the current approach is wrong:
 - What assumptions in the Thought Report could be false?
 - What risks or edge cases were not considered?
@@ -159,14 +185,14 @@ If no concerns, state: "No concerns — approach is sound."
 ```
 
 **Step 5 — Council Head reviews both reports.**
-- If Critic has concerns → `python orchestrator.py loopback think "<reason>"` → recall Thinker
-- If no concerns → `python orchestrator.py advance think "thought report + critique approved"`
+- If Critic has concerns → `council-orchestrator loopback think "<reason>"` → recall Thinker, then **GOTO MAIN LOOP step 1**
+- If no concerns → `council-orchestrator advance think "thought report + critique approved"` → then **GOTO MAIN LOOP step 1**
 
 ---
 
 ## Stage 2 — PLAN
 
-### Invoke: `writing-plans` + Spawn Planner sub-agent + Spawn Critic sub-agent
+### Invoke: `writing-plans` + `executing-plans` + `using-git-worktrees` + Spawn Planner + Critic
 
 **Prerequisite:** Stage 1 must be complete. Read THOUGHT_REPORT.md and CRITIQUE_REPORT.md.
 
@@ -179,13 +205,24 @@ If no concerns, state: "No concerns — approach is sound."
 ```
 Skill(skill="superpowers:writing-plans", args="Plan implementation for: <objective>")
 ```
+Let it load. Use the structured blueprint format.
 
-**Step 3 — Spawn Planner sub-agent:**
+**Step 3 — Invoke executing-plans skill:**
+```
+Skill(skill="superpowers:executing-plans", args="Set up batch checkpoints for: <tasks>")
+```
+
+**Step 4 — Invoke using-git-worktrees skill:**
+```
+Skill(skill="superpowers:using-git-worktrees", args="Configure isolated branches for parallel workstreams")
+```
+
+**Step 5 — Spawn Planner sub-agent:**
 ```
 Agent(description="Planner task decomposition", prompt="""
 You are the Planner in an AI Council.
 Input: THOUGHT_REPORT.md (the selected architecture)
-Invoke: writing-plans skill (just loaded)
+Skills invoked: writing-plans, executing-plans, using-git-worktrees
 Produce a TASK_EXECUTION_PLAN.md with:
 - Discrete, ordered, atomic tasks with success criteria
 - Parallel vs. sequential dependencies flagged
@@ -196,7 +233,7 @@ Produce a TASK_EXECUTION_PLAN.md with:
 """, subagent_type="general-purpose")
 ```
 
-**Step 4 — Spawn Critic sub-agent in parallel:**
+**Step 6 — Spawn Critic sub-agent in parallel:**
 ```
 Agent(description="Critic challenge plan", prompt="""
 You are the Critic. Read the Task Execution Plan being produced.
@@ -211,9 +248,9 @@ Produce PLAN_CRITIQUE.md.
 """, subagent_type="general-purpose")
 ```
 
-**Step 5 — Council Head reviews.**
-- If Critic has concerns → `python orchestrator.py loopback plan "<reason>"` → recall Planner
-- If no concerns → `python orchestrator.py advance plan "plan approved"`
+**Step 7 — Council Head reviews.**
+- If Critic has concerns → `council-orchestrator loopback plan "<reason>"` → recall Planner, **GOTO MAIN LOOP step 1**
+- If no concerns → `council-orchestrator advance plan "plan approved"` → **GOTO MAIN LOOP step 1**
 
 ---
 
@@ -228,7 +265,7 @@ Produce PLAN_CRITIQUE.md.
 ## 🔧 [Stage 3 — CREATE] Dispatching parallel creators | Using TDD
 ```
 
-**Step 2 — Invoke parallel dispatch skill:**
+**Step 2 — Invoke parallel dispatch:**
 ```
 Skill(skill="superpowers:dispatching-parallel-agents", args="Run independent Create tasks concurrently")
 ```
@@ -237,7 +274,7 @@ Skill(skill="superpowers:dispatching-parallel-agents", args="Run independent Cre
 ```
 Skill(skill="superpowers:subagent-driven-development", args="<task description>")
 ```
-This spawns a fresh sub-agent per task with mandatory two-stage review.
+Each task gets a fresh sub-agent with mandatory two-stage review.
 
 **Step 4 — Enforce TDD on every component:**
 ```
@@ -278,45 +315,50 @@ Skill(skill="superpowers:writing-skills", args="Create skill for: <missing capab
 - All Critic concerns resolved?
 - All tests pass (TDD confirmed)?
 
-If YES → `python orchestrator.py advance create "all components implemented and tested"`
-If NO → `python orchestrator.py loopback create "<reason>"` → fix and retry
+If YES → `council-orchestrator advance create "all components implemented and tested"` → **GOTO MAIN LOOP step 1**
+If NO → `council-orchestrator loopback create "<reason>"` → fix and retry → **GOTO MAIN LOOP step 1**
 
 ---
 
 ## Stage 4 — REVIEW & TEST
 
-### Invoke: `code-review` + `systematic-debugging` + `verification-before-completion`
+### Invoke: `code-review:code-review` + `requesting-code-review` + `receiving-code-review` + `systematic-debugging` + `verification-before-completion`
 
 **Step 1 — Announce:**
 ```
 ## 🔍 [Stage 4 — REVIEW & TEST] Running full council review
 ```
 
-**Step 2 — Invoke code-review skill:**
+**Step 2 — Invoke the pre-review checklist:**
 ```
-Skill(skill="superpowers:code-review", args="Review all created code for correctness and cleanups")
+Skill(skill="superpowers:requesting-code-review", args="Pre-review checklist for: <objective>")
+```
+
+**Step 3 — Invoke code-review:**
+```
+Skill(skill="code-review:code-review", args="Review all created code for correctness and cleanups")
 ```
 Use the code-review skill's pre-review checklist first, then full review.
 
-**Step 3 — Spawn ALL council roles to review simultaneously:**
+**Step 4 — Spawn ALL council roles to review simultaneously:**
 ```
 Agent(description="Reviewer logic & correctness", prompt="Review for logic errors, correctness bugs, edge cases")
 Agent(description="Critic security & performance", prompt="Review for security gaps, performance issues, anti-patterns")
 Agent(description="Verifier completeness", prompt="Review: does output fully satisfy the original objective?")
 ```
 
-**Step 4 — Invoke receiving-code-review if feedback received:**
+**Step 5 — If feedback received, invoke receiving-code-review:**
 ```
 Skill(skill="superpowers:receiving-code-review", args="Review feedback received: <summary>")
 ```
 No feedback dismissed without documented reasoning.
 
-**Step 5 — Re-enforce TDD — retest all components post-review:**
+**Step 6 — Re-enforce TDD — retest all components post-review:**
 ```
 Skill(skill="superpowers:test-driven-development", args="Re-test all components after review")
 ```
 
-**Step 6 — Produce REVIEW_ISSUES.md with all findings.**
+**Step 7 — Produce REVIEW_ISSUES.md with all findings.**
 
 **If ANY flaw detected:**
 
@@ -334,10 +376,10 @@ Skill(skill="superpowers:test-driven-development", args="Re-test all components 
    ```
    Skill(skill="superpowers:verification-before-completion", args="Confirm fix works")
    ```
-5. `python orchestrator.py loopback review "<reason>"` → re-run review
+5. `council-orchestrator loopback review "<reason>"` → re-run review → **GOTO MAIN LOOP step 1**
 6. Repeat until REVIEW_ISSUES.md has zero unresolved issues
 
-**Step 7 — When clean:** `python orchestrator.py advance review "all issues resolved, tests pass"`
+**Step 8 — When clean:** `council-orchestrator advance review "all issues resolved, tests pass"` → **GOTO MAIN LOOP step 1**
 
 ---
 
@@ -374,50 +416,64 @@ Produce VERIFICATION_SIGN_OFF.md
 """, subagent_type="general-purpose")
 ```
 
-**Step 4 — If code/output needs to be merged:**
+**Step 4 — Invoke finishing-a-development-branch if code needs merging:**
 ```
 Skill(skill="superpowers:finishing-a-development-branch", args="Merge and finalize")
 ```
 
-
 **Step 5 — Decision:**
-- If verified → `python orchestrator.py advance verify "verification passed"` → move to delivery check
-- If not verified → `python orchestrator.py loopback verify "<reason>"` → fix, re-verify
+- If verified → `council-orchestrator advance verify "verification passed"` → **GOTO MAIN LOOP step 1**
+- If not verified → `council-orchestrator loopback verify "<reason>"` → fix, re-verify → **GOTO MAIN LOOP step 1**
 
 ---
 
-## Delivery Check (after Stage 5 passes)
+## Delivery Check
+
+This runs when `council-orchestrator status` shows `stage: __delivery_check__`.
 
 **The critical gate:** does the output FULLY satisfy the original objective?
 
-```bash
-python orchestrator.py status
+```
+## 📦 [DELIVERY CHECK] Stage: __delivery_check__ | Iteration: N | Total loops: M
 ```
 
-If stage is `__delivery_check__`:
+**Step 1 — Read the objective from council_journal.md**
+**Step 2 — Read the output (all created files, VERIFICATION_SIGN_OFF.md)**
+**Step 3 — Compare output to completion criteria**
 
-1. **Compare output to original objective** — read the objective, read the output
-2. `python orchestrator.py check <output_path>` — formal completion check
-3. **If output fully satisfies objective:**
-   ```
-   ## 📦 [DELIVERY] Objective satisfied | Iteration: N | Total loops: M
-   ## 🎯 Objective: <objective>
-   ## ✅ Criteria met:
-   ##    - <all satisfied criteria>
-   ## 📄 Output: <path to output>
-   ```
-   Present the final output to the user. Done.
+```bash
+council-orchestrator check <output_path>
+```
 
-4. **If output does NOT fully satisfy the objective:**
-   ```
-   ## 🔄 [LOOP] Iteration N complete but objective not fully satisfied
-   ## 📋 Unsatisfied: <gaps>
-   ## 🚀 Starting Iteration N+1 with accumulated context + learnings
-   ```
-   ```bash
-   python orchestrator.py next-iteration
-   ```
-   Then go back to **Stage 1 — THINK**, starting a new iteration with ALL accumulated context and learnings from previous iterations.
+**Step 4 — Decision:**
+
+✅ **If output fully satisfies objective:**
+```
+## 📦 [DELIVERY] Objective satisfied!
+## 🎯 Objective: <objective>
+## ✅ Iterations: N | Total loops: M
+## 📄 Output: <path to output>
+
+=== COUNCIL FINAL REPORT ===
+Objective: <objective>
+Total iterations: N
+Total loops back: M
+Stages completed: think → plan → create → review → verify
+Final status: VERIFIED — DELIVERED
+```
+Present the final output to the user. **STOP THE LOOP.**
+
+🔄 **If output does NOT fully satisfy the objective:**
+```
+## 🔄 [LOOP] Iteration N complete — objective not fully satisfied
+## 📋 Unsatisfied criteria: <list gaps>
+## 💡 Learnings from this iteration: <what was learned>
+## 🚀 Starting Iteration N+1 with accumulated context
+```
+```bash
+council-orchestrator next-iteration
+```
+Then **GOTO MAIN LOOP step 1** — the stage is now "think" again, starting a new iteration with ALL accumulated context.
 
 ---
 
@@ -429,11 +485,11 @@ If stage is `__delivery_check__`:
 
 When the active window reaches **140,000 tokens**, run compaction:
 
-1. Compact the journal: `python orchestrator.py compact`
+1. Compact the journal: `council-orchestrator compact`
 2. Run `/compact` in the Claude Code session
 3. After compacting, continue from the last checkpoint:
    - Re-read `council_journal.md`
-   - Run `python orchestrator.py status`
+   - `council-orchestrator status`
    - Continue from the stage indicated
 
 ### Never compact mid-stage
@@ -446,7 +502,7 @@ If a sub-agent is actively working, let it finish the current atomic unit first,
 | # | Directive | Rule |
 |---|---|---|
 | 1 | **NEVER STOP** | No stage waits for user input; blockers resolved autonomously. Never ask "should I continue?" |
-| 2 | **Always check state** | Before any action, run `python orchestrator.py status` — know where you are |
+| 2 | **GOTO STEP 1** | After every stage action, IMMEDIATELY go back to `council-orchestrator status` |
 | 3 | **Never skip review** | Every stage output reviewed by Council Head before advancing |
 | 4 | **Never silence the Critic** | Critic produces a report at Stages 1, 2, 3 — explicit "no concerns" if none |
 | 5 | **Never bundle tasks** | Each atomic task gets its own sub-agent |
@@ -455,9 +511,10 @@ If a sub-agent is actively working, let it finish the current atomic unit first,
 | 8 | **Preserve what works** | During debugging, only broken components are touched |
 | 9 | **Dual-test Stage 3** | Both implementations tested in parallel; first to pass is canonical |
 | 10 | **Create skills when needed** | Missing capability → `Skill(skill="superpowers:writing-skills")`, never improvise |
-| 11 | **Auto-compact at 140K** | Run `/compact` when context ≥ 140K tokens — never wait until overflow |
-| 12 | **Safety limit: 50 iterations** | If max_iterations reached, output summary and journal — manual intervention needed |
-| 13 | **Deadman switch** | If no progress for 30 minutes across the same stage, escalate: try radically different approach |
+| 11 | **Correct skill names** | `code-review` is invoked as `code-review:code-review`, not `superpowers:code-review` |
+| 12 | **Auto-compact at 140K** | Run `/compact` when context ≥ 140K tokens — never wait until overflow |
+| 13 | **Safety limit: 50 iterations** | If max_iterations reached, output summary and journal — manual intervention needed |
+| 14 | **Deadman switch** | If no progress for 30 minutes across the same stage, escalate: try radically different approach |
 
 ---
 
@@ -474,6 +531,7 @@ If a sub-agent is actively working, let it finish the current atomic unit first,
 | Sub-agent dispatched | `## 🚀 [Stage N] Sub-agent: Role | Task: <brief>` |
 | Error / recall | `## ❌ [Stage N] Issue | Recall: Agent | Reason: <brief>` |
 | Loop back | `## 🔄 [Stage N] Looping back to Stage M | Reason: <brief>` |
+| GOTO loop top | `## 🔄 [LOOP] Stage done — GOTO step 1 | Next: council-orchestrator status` |
 | New iteration | `## 🔄 [NEW ITERATION] Iteration N+1 starting | Stage: think` |
 | Delivery | `## 📦 [DELIVERY] Objective satisfied! | Iterations: N | Loops: M` |
 
@@ -485,12 +543,7 @@ On receiving any objective:
 
 1. **Announce:** `## 🔵 [Init] Invoking: \`using-superpowers\` | Loading skills system`
 2. **Execute:** `Skill(skill="using-superpowers")` — loads the skills system
-3. **Initialize:** `python orchestrator.py init "<objective>"`
-4. **Enter main loop:**
-   - `python orchestrator.py status` → find current stage
-   - Execute that stage with full superpowers integration
-   - Advance or loopback based on results
-   - NEVER STOP until objective is met or safety limit hit
-5. **Deliver:** When __delivery_check__ says objective met, present final output
+3. **Initialize:** `council-orchestrator init "<objective>"`
+4. **ENTER MAIN LOOP** (see above) — start with `council-orchestrator status`
 
 **The council is active. The loop is turning. Awaiting the objective — or already executing.**

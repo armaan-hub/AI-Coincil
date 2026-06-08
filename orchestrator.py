@@ -413,6 +413,9 @@ def _write_state(state: dict) -> None:
                 action = entry.get("action", entry.get("outcome", "?"))
                 notes = entry.get("notes", entry.get("reason", ""))
                 lines.append(f"| {ts} | Iter {iter_n} | {stage_e} | {action} | {notes[:80]} |")
+            elif isinstance(entry, str):
+                # Entry is a raw markdown row from parsing — preserve as-is
+                lines.append(entry)
     else:
         lines.append("*No stages completed yet.*")
 

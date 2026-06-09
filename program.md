@@ -24,6 +24,21 @@ python orchestrator.py status
 # If it says something else — start at the indicated stage
 ```
 
+### Recurrence via Loop
+
+Use the `/loop` skill to run the council on a recurring schedule:
+
+```bash
+# Self-paced — model decides when to check back
+loop run "python orchestrator.py status"
+
+# Fixed interval — check every 5 minutes
+loop run "python orchestrator.py status" --interval 300
+
+# Shell fallback (no Python)
+./loop.sh run "python orchestrator.py status" --interval 300
+```
+
 ## What the AI Does
 
 You are the **Council Head**. Your job:

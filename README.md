@@ -43,15 +43,30 @@ All agents run on your current active model. No model switching needed. Works in
 
 Same loop, but switches to the best model per stage (Claude Opus for thinking, Sonnet for planning, etc.).
 
+### [`loop`](./skills/loop/SKILL.md) 🔁 Cross-Platform Recurrent Task Runner
+
+Run any command on a recurring interval — fixed or self-paced. Works across Claude Code, Gemini CLI, Copilot CLI, and plain shell.
+
+**Adapts to the platform:** Claude Code uses `ScheduleWakeup`, Gemini CLI uses `activate_skill` chaining, Copilot CLI uses subagent dispatch, and the shell fallback uses watch/cron.
+
+| Mechanism | Claude Code | Gemini CLI | Copilot CLI | Any Shell |
+|---|---|---|---|---|
+| Fixed interval | `/loop 5m /cmd` | `loop run "cmd" -i 30` | `loop run "cmd" -i 30` | `./loop.sh run "cmd" -i 30` |
+| Self-paced | `/loop /cmd` | `activate_skill("loop")` | subagent loop | `./loop.sh interactive "cmd"` |
+| Status | `loop status` | `loop status` | `loop status` | `./loop.sh status` |
+
 ## Files
 
 | File | Purpose |
 |---|---|
 | [`program.md`](./program.md) | The autoresearch-style program — point your agent here to launch the council |
 | [`orchestrator.py`](./orchestrator.py) | State management engine — tracks stage, iteration, loops, completion criteria |
+| [`loop.py`](./loop.py) | Cross-platform loop state engine (Python) |
+| [`loop.sh`](./loop.sh) | Loop engine shell fallback (zero deps) |
 | [`skills/council-orchestration/SKILL.md`](./skills/council-orchestration/SKILL.md) | Full orchestration instructions for single-model mode |
 | [`skills/ai-council-orchestration/SKILL.md`](./skills/ai-council-orchestration/SKILL.md) | Full orchestration instructions for multi-model mode |
-| [`install.sh`](./install.sh) | Install skills into Claude Code / Copilot CLI |
+| [`skills/loop/SKILL.md`](./skills/loop/SKILL.md) | Cross-platform loop skill definition |
+| [`install.sh`](./install.sh) | Install skills into Claude Code / Copilot CLI / PATH |
 
 ## Quick Start
 

@@ -4,15 +4,19 @@ Council Orchestrator — Autonomous Multi-Agent Loop Engine
 
 The persistent state machine behind the AI Council pattern.
 Inspired by Karpathy's autoresearch loop: keeps iterating through
-Think → Plan → Create → Review → Verify until the objective is met.
+Boot → Think → Plan → Create → Review → Verify until the objective is met.
+
+Phase 0 (Boot): Scans the project, infers domain, generates domain-aware expert
+agent personas in COUNCIL_AGENTS.md. All subsequent stages use these personas.
 
 Usage (as invoked by the AI during orchestration):
-    python orchestrator.py init "<objective>"          # Start a new council session
+    python orchestrator.py init "<objective>"          # Start a new council session (begins at "boot")
     python orchestrator.py status                      # Current stage & iteration
     python orchestrator.py advance <stage> <outcome>   # Mark stage complete
     python orchestrator.py loopback <stage> <reason>   # Go back to a stage
     python orchestrator.py check <output_path>         # Check if output satisfies objective
     python orchestrator.py models                      # Fetch live model catalog from proxy
+    python orchestrator.py agents                      # Show current COUNCIL_AGENTS.md summary
 """
 
 import json
@@ -25,8 +29,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 JOURNAL_FILE = "council_journal.md"
+AGENTS_FILE = "COUNCIL_AGENTS.md"
 MAX_ITERATIONS = 50  # safety limit to prevent infinite loops
 MAX_LOOPS_PER_STAGE = 10
+
+STAGE_ORDER = ["boot", "think", "plan", "create", "review", "verify"]
 
 
 # ─── Data Model ──────────────────────────────────────────────────────────────
@@ -71,7 +78,7 @@ def init_journal(objective: str) -> dict:
         "objective": objective,
         "started": now,
         "iteration": 1,
-        "stage": "think",
+        "stage": "boot",
         "loops": 0,
         "total_loops": 0,
         "max_iterations": MAX_ITERATIONS,
@@ -80,10 +87,13 @@ def init_journal(objective: str) -> dict:
         "decisions": [],
         "deadman": now,
         "criteria": criteria,
+        "domain": "",
+        "agents_generated": False,
     }
     _write_state(state)
-    print(f"✅ Council initialized | Iteration 1 | Stage: think")
+    print(f"✅ Council initialized | Iteration 1 | Stage: boot")
     print(f"   Objective: {objective[:80]}...")
+    print(f"   Next: Run Phase 0 — scan project, detect domain, generate COUNCIL_AGENTS.md")
     print(f"   Max iterations: {MAX_ITERATIONS} (safety limit)")
     print(f"   Journal: {JOURNAL_FILE}")
     return state
@@ -129,10 +139,9 @@ def advance_stage(stage: str, outcome: str, notes: str = "") -> dict:
         sys.exit(1)
 
     stage = stage.lower()
-    stage_order = ["think", "plan", "create", "review", "verify"]
 
-    if stage not in stage_order:
-        print(f"❌ Unknown stage: {stage}. Valid: {', '.join(stage_order)}")
+    if stage not in STAGE_ORDER:
+        print(f"❌ Unknown stage: {stage}. Valid: {', '.join(STAGE_ORDER)}")
         sys.exit(1)
 
     # Record this stage completion
@@ -148,12 +157,20 @@ def advance_stage(stage: str, outcome: str, notes: str = "") -> dict:
     state["deadman"] = _now()
     state["loops"] = 0  # reset per-stage loop counter
 
+    # Track agent generation
+    if stage == "boot":
+        state["agents_generated"] = True
+        if os.path.exists(AGENTS_FILE):
+            print(f"✅ COUNCIL_AGENTS.md found — domain-aware team assembled")
+
     # Determine next stage
-    current_idx = stage_order.index(stage)
-    if current_idx < len(stage_order) - 1:
-        next_stage = stage_order[current_idx + 1]
+    current_idx = STAGE_ORDER.index(stage)
+    if current_idx < len(STAGE_ORDER) - 1:
+        next_stage = STAGE_ORDER[current_idx + 1]
         state["stage"] = next_stage
         print(f"✅ Stage '{stage}' complete → advancing to '{next_stage}'")
+        if next_stage == "think" and state.get("agents_generated"):
+            print(f"   Agent team ready — personas from COUNCIL_AGENTS.md will be used")
     else:
         # Stage 5 (verify) complete — check if we need another iteration
         print(f"✅ Stage '{stage}' complete — iteration {state['iteration']} complete")
@@ -171,10 +188,9 @@ def loopback(target_stage: str, reason: str) -> dict:
         sys.exit(1)
 
     target_stage = target_stage.lower()
-    stage_order = ["think", "plan", "create", "review", "verify"]
 
-    if target_stage not in stage_order:
-        print(f"❌ Unknown stage: {target_stage}. Valid: {', '.join(stage_order)}")
+    if target_stage not in STAGE_ORDER:
+        print(f"❌ Unknown stage: {target_stage}. Valid: {', '.join(STAGE_ORDER)}")
         sys.exit(1)
 
     # Increment loop counters
@@ -207,11 +223,10 @@ def loopback(target_stage: str, reason: str) -> dict:
     state.setdefault("history", []).append(entry)
     state["stage"] = target_stage
     # Remove stages after target from completed list
-    stage_order = ["think", "plan", "create", "review", "verify"]
-    target_idx = stage_order.index(target_stage)
+    target_idx = STAGE_ORDER.index(target_stage)
     state["completed_stages"] = [
         s for s in state.get("completed_stages", [])
-        if stage_order.index(s) < target_idx
+        if STAGE_ORDER.index(s) < target_idx
     ]
     state["deadman"] = _now()
 
@@ -229,7 +244,7 @@ def next_iteration() -> dict:
         sys.exit(1)
 
     state["iteration"] += 1
-    state["stage"] = "think"
+    state["stage"] = "think"  # boot only runs once; agents persist in COUNCIL_AGENTS.md
     state["completed_stages"] = []
     state["loops"] = 0
     state["deadman"] = _now()
@@ -245,7 +260,8 @@ def next_iteration() -> dict:
     state.setdefault("history", []).append(entry)
 
     _write_state(state)
-    print(f"🔄 Starting Iteration {state['iteration']} | Stage: think")
+    agents_note = " | COUNCIL_AGENTS.md retained" if state.get("agents_generated") else ""
+    print(f"🔄 Starting Iteration {state['iteration']} | Stage: think{agents_note}")
     print(f"   Total loops so far: {state['total_loops']}")
     return state
 
@@ -287,11 +303,13 @@ def status() -> dict:
         return None
 
     stage_icons = {
-        "think": "💭", "plan": "📋", "create": "🔧",
+        "boot": "🚀", "think": "💭", "plan": "📋", "create": "🔧",
         "review": "🔍", "verify": "✅", "__delivery_check__": "📦",
         "__maxed_out__": "⚠️"
     }
     icon = stage_icons.get(state.get("stage", ""), "❓")
+
+    agents_status = "✅ COUNCIL_AGENTS.md ready" if (state.get("agents_generated") and os.path.exists(AGENTS_FILE)) else "⏳ Boot pending — run Phase 0 first"
 
     print(f"\n{'='*60}")
     print(f"  COUNCIL STATUS")
@@ -301,6 +319,9 @@ def status() -> dict:
     print(f"  🔁 Total loops:  {state.get('total_loops', 0)}")
     print(f"  ✅ Completed:    {', '.join(state.get('completed_stages', [])) or 'none'}")
     print(f"  📋 Criteria:     {len(state.get('criteria', []))} total")
+    print(f"  🤖 Agent team:   {agents_status}")
+    if state.get("domain"):
+        print(f"  🌐 Domain:       {state.get('domain')}")
     print(f"  🎯 Objective:    {state.get('objective', 'N/A')[:60]}...")
     print(f"  🕐 Started:      {state.get('started', 'N/A')}")
     print(f"  🕐 Last activity: {state.get('deadman', 'N/A')}")
@@ -588,6 +609,38 @@ def show_models() -> None:
     print(f"💡 Role recommendations also written to {MODELS_CACHE}")
 
 
+def show_agents() -> None:
+    """Show a summary of the current COUNCIL_AGENTS.md agent team."""
+    if not os.path.exists(AGENTS_FILE):
+        print(f"❌ No {AGENTS_FILE} found.")
+        print(f"   Run Phase 0 (boot) first: council-orchestrator status → stage 'boot'")
+        print(f"   The boot phase scans the project, detects domain, and generates expert personas.")
+        return
+
+    with open(AGENTS_FILE, "r") as f:
+        content = f.read()
+
+    print(f"\n{'='*60}")
+    print(f"  🤖 COUNCIL AGENT TEAM")
+    print(f"{'='*60}")
+
+    # Extract key info from COUNCIL_AGENTS.md
+    lines = content.split("\n")
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## Project:") or stripped.startswith("## Domain:") or stripped.startswith("## Generated:"):
+            print(f"  {stripped}")
+        elif stripped.startswith("## ") and stripped not in ("## Project:", "## Domain:", "## Generated:"):
+            print(f"\n  {stripped}")
+        elif stripped.startswith("**Title:**"):
+            title = stripped.replace("**Title:**", "").strip()
+            print(f"    → {title}")
+
+    print(f"\n{'='*60}")
+    print(f"  📄 Full details: {AGENTS_FILE}")
+    print(f"{'='*60}\n")
+
+
 def compact() -> None:
     """Compact the journal by removing redundant entries."""
     state = get_state()
@@ -605,6 +658,9 @@ def compact() -> None:
         }
         state["history"] = [summary] + history[-50:]
         print(f"📦 Journal compacted: {len(history)} → {len(state['history'])} entries")
+
+    if state.get("agents_generated") and os.path.exists(AGENTS_FILE):
+        print(f"✅ {AGENTS_FILE} preserved — agent personas intact after compaction")
 
     _write_state(state)
 
@@ -652,7 +708,7 @@ def _write_state(state: dict) -> None:
     objective = state.get("objective", "N/A")
     started = state.get("started", _now())
     iteration = state.get("iteration", 1)
-    stage = state.get("stage", "think")
+    stage = state.get("stage", "boot")
     loops = state.get("loops", 0)
     total_loops = state.get("total_loops", 0)
     deadman = state.get("deadman", _now())
@@ -660,6 +716,8 @@ def _write_state(state: dict) -> None:
     history_entries = state.get("history", [])
     decisions = state.get("decisions", [])
     completed = state.get("completed_stages", [])
+    domain = state.get("domain", "")
+    agents_generated = state.get("agents_generated", False)
 
     lines = [
         "# Council Journal",
@@ -674,6 +732,8 @@ def _write_state(state: dict) -> None:
         f"- Loops at stage: {loops}",
         f"- Total loops: {total_loops}",
         f"- Completed stages: {', '.join(completed) if completed else 'none'}",
+        f"- Domain: {domain}",
+        f"- Agents generated: {agents_generated}",
         "",
         "## Completion Criteria",
     ]
@@ -726,7 +786,7 @@ def _parse_journal(content: str) -> dict:
         "objective": "",
         "started": "",
         "iteration": 1,
-        "stage": "think",
+        "stage": "boot",
         "loops": 0,
         "total_loops": 0,
         "completed_stages": [],
@@ -734,6 +794,8 @@ def _parse_journal(content: str) -> dict:
         "decisions": [],
         "deadman": "",
         "criteria": [],
+        "domain": "",
+        "agents_generated": False,
     }
 
     current_section = None
@@ -773,6 +835,11 @@ def _parse_journal(content: str) -> dict:
             elif line_stripped.startswith("- Completed stages:"):
                 val = line_stripped.split(":", 1)[1].strip()
                 state["completed_stages"] = [s.strip() for s in val.split(",") if s.strip() and s != "none"]
+            elif line_stripped.startswith("- Domain:"):
+                state["domain"] = line_stripped.split(":", 1)[1].strip()
+            elif line_stripped.startswith("- Agents generated:"):
+                val = line_stripped.split(":", 1)[1].strip().lower()
+                state["agents_generated"] = val == "true"
         elif current_section == "criteria" and line_stripped.startswith("- ["):
             state["criteria"].append(line_stripped)
         elif current_section == "history" and line_stripped.startswith("|"):
@@ -793,8 +860,8 @@ def main():
         print("Usage: python orchestrator.py <command> [args...]")
         print("")
         print("Commands:")
-        print("  init \"<objective>\"     Start a new council session")
-        print("  status                 Show current council state")
+        print("  init \"<objective>\"     Start a new council session (begins at 'boot')")
+        print("  status                 Show current council state and agent team")
         print("  advance <stage> [notes] Mark stage complete, advance to next")
         print("  loopback <stage> <reason>  Loop back to a stage")
         print("  next-iteration         Start a new iteration (back to think)")
@@ -803,6 +870,9 @@ def main():
         print("  history                Print iteration history")
         print("  check [path]           Check completion status")
         print("  models                 Fetch live model catalog from proxy")
+        print("  agents                 Show current COUNCIL_AGENTS.md team summary")
+        print("")
+        print("Stages: boot → think → plan → create → review → verify")
         sys.exit(1)
 
     cmd = sys.argv[1]
@@ -849,6 +919,9 @@ def main():
 
     elif cmd == "models":
         show_models()
+
+    elif cmd == "agents":
+        show_agents()
 
     else:
         print(f"❌ Unknown command: {cmd}")

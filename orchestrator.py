@@ -688,11 +688,15 @@ def history() -> None:
     print(f"\n📜 COUNCIL HISTORY ({len(history)} entries)")
     print(f"{'='*60}")
     for i, entry in enumerate(history):
-        ts = entry.get("timestamp", "?")[11:19]  # just HH:MM:SS
-        stage = entry.get("stage", "?")
-        action = entry.get("action", entry.get("outcome", "?"))
-        notes = entry.get("notes", entry.get("reason", ""))
-        print(f"  [{ts}] Iter {entry.get('iteration', '?')} | {stage:12s} | {action:20s} | {notes[:50]}")
+        if isinstance(entry, dict):
+            ts = entry.get("timestamp", "?")[11:19]  # just HH:MM:SS
+            stage = entry.get("stage", "?")
+            action = entry.get("action", entry.get("outcome", "?"))
+            notes = entry.get("notes", entry.get("reason", ""))
+            print(f"  [{ts}] Iter {entry.get('iteration', '?')} | {stage:12s} | {action:20s} | {notes[:50]}")
+        else:
+            # Raw markdown table row from parsed journal
+            print(f"  {entry}")
     print(f"{'='*60}\n")
 
 

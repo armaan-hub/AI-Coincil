@@ -342,8 +342,8 @@ Head reads TEAM_CONSENSUS.md:
 
 **Load COUNCIL_AGENTS.md first.** All agents must be instantiated with their domain personas.
 
-### Step 1: Explore Context
-Head Agent assigns the Thinking Team: "Read project files, docs, recent commits. Understand what exists. Prepare independent proposals."
+### Step 1: Explore Context & Load Helper Skills
+Head Agent assigns the Thinking Team: "Read project files, docs, recent commits. Understand what exists. Also read and load all helper skills (`skills/ponytail/SKILL.md`, `skills/ponytail-review/SKILL.md`, `skills/ponytail-audit/SKILL.md`, `skills/ponytail-debt/SKILL.md`, `skills/ponytail-gain/SKILL.md`, `skills/ponytail-help/SKILL.md`, `skills/loop/SKILL.md`) to integrate their rules and capabilities into the session context. Prepare independent proposals."
 
 ### Step 2: Thinking Team Debate — Architectures
 Invoke **Team Debate Protocol** with topic: "Propose the best architecture for: `<objective>`"

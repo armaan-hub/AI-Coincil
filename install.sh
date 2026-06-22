@@ -9,9 +9,9 @@ COPILOT_DIR="$HOME/.copilot/installed-plugins/superpowers-marketplace/superpower
 CLAUDE_DIR="$HOME/.claude/skills"
 BIN_DIR="$HOME/bin"
 
-skills=("council-orchestration" "ai-council-orchestration" "loop")
+skills=("council-orchestration" "ai-council-orchestration" "loop" "ponytail" "ponytail-review" "ponytail-audit" "ponytail-debt" "ponytail-gain" "ponytail-help")
 
-echo "🔵 Installing AI Council skills..."
+echo "🔵 Installing AI Council + Ponytail skills..."
 
 for skill in "${skills[@]}"; do
   if [ -d "$COPILOT_DIR" ]; then
@@ -59,6 +59,15 @@ echo "     council-orchestrator  — council state management"
 echo "     loop                  — cross-platform loop engine (Python)"
 echo "     loop.sh               — loop engine (shell fallback)"
 echo ""
-echo "   Invoke:"
+echo "   Orchestration & Loop Invoke:"
 echo "     /council-orchestration   | /ai-council-orchestration   | /loop"
 echo "     council-orchestrator init | loop init                  | loop.sh run"
+echo ""
+echo "   Ponytail over-engineering prevention commands:"
+echo "     /ponytail [lite|full|ultra|off] - Set the intensity, or turn it off"
+echo "     /ponytail-review                - Review the current diff for over-engineering"
+echo "     /ponytail-audit                 - Audit the whole repo for over-engineering"
+echo "     /ponytail-debt                  - Harvest deferred ponytail: comments into a ledger"
+echo "     /ponytail-gain                  - Show the measured impact scoreboard"
+echo "     /ponytail-help                  - Quick reference for ponytail commands"
+echo " "

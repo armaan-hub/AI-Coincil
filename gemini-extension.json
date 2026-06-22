@@ -1,0 +1,6 @@
+{
+  "name": "ponytail",
+  "version": "4.7.0",
+  "description": "AI Council autonomous multi-agent orchestration loop with embedded Ponytail over-engineering prevention.",
+  "contextFileName": "AGENTS.md"
+}

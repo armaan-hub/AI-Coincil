@@ -55,6 +55,19 @@ Run any command on a recurring interval — fixed or self-paced. Works across Cl
 | Self-paced | `/loop /cmd` | `activate_skill("loop")` | subagent loop | `./loop.sh interactive "cmd"` |
 | Status | `loop status` | `loop status` | `loop status` | `./loop.sh status` |
 
+### [`ponytail`](./skills/ponytail/SKILL.md) 🦎 Over-Engineering Prevention (KISS/YAGNI)
+
+Forces the simplest, shortest solution that actually works: standard library first, native platform features before dependencies, and one line before fifty. Fully embedded in the Thinking, Planning, Creating, and Reviewing stages of the AI Council.
+
+| Command | What it does |
+|---------|--------------|
+| `/ponytail [lite \| full \| ultra \| off]` | Set the intensity, or turn it off. No argument reports the current level. |
+| `/ponytail-review` | Review the current diff for over-engineering, hands back a delete-list. |
+| `/ponytail-audit` | Audit the whole repo for over-engineering, not just the diff. |
+| `/ponytail-debt` | Harvest the ponytail: shortcuts you've deferred into a ledger, so "later" doesn't become "never". |
+| `/ponytail-gain` | Show the measured impact scoreboard (less code, less cost, more speed) from the benchmark. |
+| `/ponytail-help` | Quick reference for the commands above. |
+
 ## Files
 
 | File | Purpose |
@@ -63,10 +76,17 @@ Run any command on a recurring interval — fixed or self-paced. Works across Cl
 | [`orchestrator.py`](./orchestrator.py) | State management engine — tracks stage, iteration, loops, completion criteria |
 | [`loop.py`](./loop.py) | Cross-platform loop state engine (Python) |
 | [`loop.sh`](./loop.sh) | Loop engine shell fallback (zero deps) |
-| [`skills/council-orchestration/SKILL.md`](./skills/council-orchestration/SKILL.md) | Full orchestration instructions for single-model mode |
-| [`skills/ai-council-orchestration/SKILL.md`](./skills/ai-council-orchestration/SKILL.md) | Full orchestration instructions for multi-model mode |
+| [`AGENTS.md`](./AGENTS.md) | Global developer ruleset enforcing KISS/YAGNI guidelines |
+| [`skills/council-orchestration/SKILL.md`](./skills/council-orchestration/SKILL.md) | Full orchestration instructions (Single-Model) with embedded Ponytail rules |
+| [`skills/ai-council-orchestration/SKILL.md`](./skills/ai-council-orchestration/SKILL.md) | Full orchestration instructions (Multi-Model) with embedded Ponytail rules |
 | [`skills/loop/SKILL.md`](./skills/loop/SKILL.md) | Cross-platform loop skill definition |
-| [`install.sh`](./install.sh) | Install skills into Claude Code / Copilot CLI / PATH |
+| [`skills/ponytail/SKILL.md`](./skills/ponytail/SKILL.md) | Standard Ponytail over-engineering prevention guidelines |
+| [`skills/ponytail-review/SKILL.md`](./skills/ponytail-review/SKILL.md) | Instruction for over-engineering reviews |
+| [`skills/ponytail-audit/SKILL.md`](./skills/ponytail-audit/SKILL.md) | Whole-repo over-engineering audits |
+| [`skills/ponytail-debt/SKILL.md`](./skills/ponytail-debt/SKILL.md) | Debt ledger compiler |
+| [`skills/ponytail-gain/SKILL.md`](./skills/ponytail-gain/SKILL.md) | Scoreboard viewer |
+| [`skills/ponytail-help/SKILL.md`](./skills/ponytail-help/SKILL.md) | Command quick reference |
+| [`install.sh`](./install.sh) | Install AI Council and Ponytail skills into Claude Code / Copilot CLI / PATH |
 
 ## Quick Start
 

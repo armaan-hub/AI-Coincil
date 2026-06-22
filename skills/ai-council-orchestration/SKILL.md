@@ -153,7 +153,7 @@ BREAK ONLY when:
 1. **Model selection:** Run `council-orchestrator models` or check `COUNCIL_MODELS.md`. Pick the best Thinker model from what's connected.
 2. **Explore context** — project files, recent commits, existing docs.
 3. **Clarify & decompose** — break objective into independent subsystems.
-4. **Propose 2-3 architectures** with explicit trade-offs.
+4. **Propose 2-3 architectures** with explicit trade-offs (adhering to Ponytail rules: YAGNI, standard library/native features first, no speculative abstractions).
 5. **Stress-test:** What assumptions could be false? What could go wrong?
 6. **Spawn Thinker sub-agent** → `THOUGHT_REPORT.md`
 7. **Spawn Critic sub-agent** → `CRITIQUE_REPORT.md`
@@ -167,9 +167,9 @@ BREAK ONLY when:
 **Model: Best planner connected** (priority: copilot/claude-sonnet-4.6 → opencode/qwen3.6-plus → opencode/minimax-m2.7 → best connected)
 
 1. **Model selection:** Pick the best Planner model.
-2. Map every file that will be changed. One responsibility per file.
+2. Map the absolute minimum file structure needed. Avoid speculative helper files or interfaces.
 3. Decompose into bite-sized tasks (2-5 min each).
-4. Write `TASK_EXECUTION_PLAN.md` with real code in every step.
+4. Write `TASK_EXECUTION_PLAN.md` with real code in every step. No placeholders or boilerplate.
 5. Self-review: spec coverage? placeholders? type consistency?
 6. Spawn Critic: missing criteria? dependencies correct?
 7. If concerns → loopback → **GOTO LOOP**
@@ -183,7 +183,7 @@ BREAK ONLY when:
 
 1. **Model selection:** Pick the best Creator model.
 2. **TDD IRON LAW:** No production code without a failing test first.
-3. RED → Verify RED → GREEN → Verify GREEN → REFACTOR
+3. RED → Verify RED → GREEN (minimal implementation following Ponytail ladder: YAGNI → stdlib → native → one-line → minimum code) → Verify GREEN → REFACTOR (staying green, mark simplifications with `ponytail:` comments).
 4. Dispatch fresh sub-agents per independent task.
 5. Two-stage review per task: spec compliance → code quality.
 6. Parallel dispatch for independent domains.
@@ -199,7 +199,7 @@ BREAK ONLY when:
 
 1. **Model selection:** Pick the best Reviewer model.
 2. Pre-review: get SHAs, summary of what was built.
-3. Spawn ALL council roles to review simultaneously.
+3. Spawn ALL council roles to review simultaneously. Critic must run a ponytail-review for over-engineering (tags: delete, stdlib, native, yagni, shrink) and report net lines removable.
 4. If flaws → Systematic Debugging (4-phase: root cause → pattern → hypothesis → fix)
 5. **IRON LAW:** No fixes without root cause investigation.
 6. Fix → re-verify → loopback review → **GOTO LOOP**
@@ -227,15 +227,16 @@ When stage is `__delivery_check__`:
 
 ## Standing Directives
 
-| # | Directive |
-|---|---|
-| 1 | **NEVER STOP** — no asking for permission |
-| 2 | **GOTO LOOP step 1** — after every action |
-| 3 | **TDD always** — no code without failing test |
-| 4 | **Verify before claiming** — run command, read output |
-| 5 | **Root cause before fix** — no fixes without investigation |
-| 6 | **Safety limit: 50 iterations** |
-| 7 | **Auto-discover models** — run `council-orchestrator models` at session start |
+| # | Directive | Rule |
+|---|---|---|
+| 1 | **NEVER STOP** | No user input needed. Resolve blockers autonomously. |
+| 2 | **GOTO LOOP step 1** | After every action, immediately check status |
+| 3 | **TDD always** | No production code without a failing test first |
+| 4 | **Verify before claiming** | Run command, check fresh exit code & output |
+| 5 | **Root cause before fix** | No symptom fixes without investigation |
+| 6 | **Safety limit: 50 iterations** | Loop terminates to prevent runaway tokens |
+| 7 | **Auto-discover models** | Refresh list with `council-orchestrator models` |
+| 8 | **Follow Ponytail rules** | YAGNI → stdlib → native → one line → minimum. Mark simplifications with `ponytail:` comments |
 
 ## Activation
 

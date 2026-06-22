@@ -350,8 +350,8 @@ Invoke **Team Debate Protocol** with topic: "Propose the best architecture for: 
 Each Thinker (using their domain persona) independently proposes 1-2 architectures. Then they critique each other. Then converge.
 
 Cover in debate:
-- Architecture & components (through domain lens)
-- Data flow & interfaces
+- Architecture & components (through domain lens, adhering to Ponytail rules: YAGNI, standard library/native features first, no speculative abstractions)
+- Data flow & interfaces (simplest and shortest path possible)
 - Error handling & edge cases  
 - Testing strategy (as this domain would validate)
 
@@ -383,11 +383,11 @@ Write `THOUGHT_REPORT.md` with: interpretations from domain perspective, constra
 **Load COUNCIL_AGENTS.md.** Use domain personas throughout.
 
 ### Step 1: Map File Structure
-Thinking Team debates file/module structure. Each Thinker proposes a structure → debate → consensus on which files are created/modified. Each file = one clear responsibility.
+Thinking Team debates file/module structure. Each Thinker proposes a structure → debate → consensus on which files are created/modified. Each file = one clear responsibility. Follow Ponytail rules: map the absolute minimum file structure needed. Avoid speculative helper files, single-implementation interfaces, or config bloat.
 
 ### Step 2: Execution Team Plan Validation
 After Thinking Team produces task list, invoke **Execution Team** (not Thinking Team) to review feasibility:
-- Executor A: "Can this actually be built this way? Are tasks realistic?"
+- Executor A: "Can this actually be built this way? Are tasks realistic? Does it use standard libraries and native features instead of installing new dependencies?"
 - Executor B: "Is the documentation plan complete? Are secondary tasks covered?"
 
 ### Step 3: Decompose into Bite-Sized Tasks
@@ -451,8 +451,8 @@ Spawn Critic (domain persona): "Are any tasks under-specified? Dependencies corr
 ```
 **GREEN — Minimal Implementation:**
 ```
-- Write SIMPLEST code to pass the test
-- No YAGNI features, no "while I'm here" improvements
+- Write SIMPLEST code to pass the test, adhering strictly to Ponytail's ladder (YAGNI → stdlib → native → one-line → minimum code)
+- No unrequested abstractions, boilerplate, or dependencies
 - Don't add what the test doesn't require
 ```
 **Verify GREEN — Watch It Pass:**
@@ -470,6 +470,7 @@ Spawn Critic (domain persona): "Are any tasks under-specified? Dependencies corr
 - Extract helpers
 - Keep tests green
 - Don't add behavior
+- Mark deliberate simplifications and shortcuts with a `ponytail: <ceiling>, <upgrade path>` comment
 ```
 
 **IRON LAW:** `NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST.` Write code before test? Delete it. Start over. No exceptions.
@@ -558,6 +559,10 @@ Before reviewing:
 Agent(persona=<Critic from COUNCIL_AGENTS.md>):
   "As the <Critic title>: Review for logic errors, domain-specific correctness,
    edge cases, security gaps, anti-patterns, maintainability.
+   Also run a ponytail-review for over-engineering and complexity. Find what to delete/simplify using tags:
+   delete (dead code/flexibility), stdlib (reinvented stdlib), native (dependency doing what platform does),
+   yagni (abstraction with 1 implementation), shrink (same logic, fewer lines).
+   List location, what to cut, and what replaces it. Report the net lines removable.
    Would a <Critic title> approve this in production?"
 
 Agent(persona=<Testing Agent from COUNCIL_AGENTS.md>):
@@ -772,6 +777,7 @@ Never compact mid-sub-agent task — finish the atomic unit first.
 | 17 | **Auto-compact at 140K** | Run /compact when context ≥ 140K. Re-read COUNCIL_AGENTS.md after compaction. |
 | 18 | **Safety limit: 50 iterations** | Journal preserved if hit. Manual intervention needed. |
 | 19 | **Deadman switch** | 10+ loops on same stage? Radically change approach. |
+| 20 | **Follow Ponytail rules** | Use Ponytail ladder: YAGNI → stdlib → native → one line → minimum. Avoid speculative abstractions/boilerplate. Mark shortcuts with `ponytail:` comments. |
 
 ---
 

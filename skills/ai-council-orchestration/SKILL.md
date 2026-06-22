@@ -181,10 +181,10 @@ BREAK ONLY when:
 
 **Model: Best coder connected** (priority: copilot/gpt-5.4 → opencode/deepseek-v4-flash → opencode/minimax-m2.7 → copilot/grok-code-fast-1 → any connected)
 
-1. **Model selection:** Pick the best Creator model.
+1. **Model selection:** Pick the best Creator model. Verify current level using `/ponytail`.
 2. **TDD IRON LAW:** No production code without a failing test first.
 3. RED → Verify RED → GREEN (minimal implementation following Ponytail ladder: YAGNI → stdlib → native → one-line → minimum code) → Verify GREEN → REFACTOR (staying green, mark simplifications with `ponytail:` comments).
-4. Dispatch fresh sub-agents per independent task.
+4. Dispatch fresh sub-agents per independent task. Ensure they are instructed to follow the Ponytail ladder.
 5. Two-stage review per task: spec compliance → code quality.
 6. Parallel dispatch for independent domains.
 7. If missing capability → write pattern as skill.
@@ -200,6 +200,7 @@ BREAK ONLY when:
 1. **Model selection:** Pick the best Reviewer model.
 2. Pre-review: get SHAs, summary of what was built.
 3. Spawn ALL council roles to review simultaneously. Critic must run a ponytail-review for over-engineering (tags: delete, stdlib, native, yagni, shrink) and report net lines removable.
+   Additionally, run the `/ponytail-review` command (or `ponytail-review` skill) directly on the current git diff to harvest a concrete delete-list.
 4. If flaws → Systematic Debugging (4-phase: root cause → pattern → hypothesis → fix)
 5. **IRON LAW:** No fixes without root cause investigation.
 6. Fix → re-verify → loopback review → **GOTO LOOP**
@@ -215,8 +216,9 @@ BREAK ONLY when:
 2. **IRON LAW:** No "it works" without fresh verification output.
 3. Run full test suite, build, integration.
 4. Spawn completeness verifier.
-5. Produce `VERIFICATION_SIGN_OFF.md`.
-6. If verified → advance → **GOTO LOOP**
+5. Run the `/ponytail-debt` command (or `ponytail-debt` skill) to harvest any deferred shortcuts into `PONYTAIL-DEBT.md`.
+6. Produce `VERIFICATION_SIGN_OFF.md`.
+7. If verified → advance → **GOTO LOOP**
 7. If not → loopback to appropriate stage → **GOTO LOOP**
 
 ## Delivery Check

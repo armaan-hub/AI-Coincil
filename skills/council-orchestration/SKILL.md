@@ -260,7 +260,7 @@ For the detected domain, generate domain-appropriate titles for each of the 6 ag
 
 ### Step 5: Confirm and Advance
 
-Display generated agent team to user:
+Display generated agent team and active Ponytail mode to user:
 ```
 🎯 Project: <name> | Domain: <domain>
 👑 Head: <title>
@@ -268,6 +268,7 @@ Display generated agent team to user:
 ⚒️  Execution Team: <Executor A title> + <Executor B title>
 🔍 Critic: <title>
 🧪 Testing Agent: <title>
+🦎 Ponytail Mode: <run /ponytail command to check and report current level>
 ```
 
 Then: `council-orchestrator advance boot "agent team assembled"` → **GOTO LOOP step 1**
@@ -477,12 +478,14 @@ Spawn Critic (domain persona): "Are any tasks under-specified? Dependencies corr
 
 ### Step 2: Dispatch Per-Task Subagents (with domain personas)
 
-For independent tasks, spawn fresh sub-agents with their COUNCIL_AGENTS.md personas:
+For independent tasks, spawn fresh sub-agents with their COUNCIL_AGENTS.md personas. Ensure the Ponytail ruleset and active level are fully loaded in their context:
 ```
 Agent(persona=<Executor A from COUNCIL_AGENTS.md>, prompt="""
 You are the <Executor A title> for the <project name> project.
 Implement Task N: <description>
 <TDD instructions>
+Adhere strictly to the Ponytail ladder: YAGNI → stdlib → native → one-line → minimum code.
+Do not introduce unrequested abstractions or dependencies.
 Self-review before reporting done.
 """)
 ```
@@ -570,6 +573,8 @@ Agent(persona=<Testing Agent from COUNCIL_AGENTS.md>):
    Run every validation command. Report EVERY failure — do not suppress any.
    Produce TEST_RESULTS.md with full output."
 ```
+
+Additionally, run the `/ponytail-review` command (or the `ponytail-review` skill) directly on the current git diff to harvest a concrete delete-list of over-engineered elements, and append this output to the review feedback.
 
 ### Step 3: Testing Agent Error Routing
 When Testing Agent reports errors:
@@ -691,6 +696,8 @@ Produce VERIFICATION_SIGN_OFF.md
 - If ANY unsatisfied: state each gap explicitly
 """)
 ```
+
+Before sign-off, run the `/ponytail-debt` command (or `ponytail-debt` skill) to scan the codebase for any `ponytail:` comments, verify their upgrade triggers, and ensure they are captured in a tracked ledger file `PONYTAIL-DEBT.md` in the project root.
 
 ### Step 4: Branch Finishing (if code to merge)
 ```

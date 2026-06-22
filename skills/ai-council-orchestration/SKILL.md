@@ -151,7 +151,7 @@ BREAK ONLY when:
 **Model: Strongest analytical model connected** (priority: copilot/claude-opus-4.6-1m → opencode/qwen3.7-max → opencode/deepseek-v4-pro → opencode/kimi-k2.6 → any connected)
 
 1. **Model selection:** Run `council-orchestrator models` or check `COUNCIL_MODELS.md`. Pick the best Thinker model from what's connected.
-2. **Explore context** — project files, recent commits, existing docs.
+2. **Explore context & load helper skills** — read project files, docs, recent commits. Also read and load all helper skills (`skills/ponytail/SKILL.md`, `skills/ponytail-review/SKILL.md`, `skills/ponytail-audit/SKILL.md`, `skills/ponytail-debt/SKILL.md`, `skills/ponytail-gain/SKILL.md`, `skills/ponytail-help/SKILL.md`, `skills/loop/SKILL.md`) to integrate their rules and capabilities into the session context.
 3. **Clarify & decompose** — break objective into independent subsystems.
 4. **Propose 2-3 architectures** with explicit trade-offs (adhering to Ponytail rules: YAGNI, standard library/native features first, no speculative abstractions).
 5. **Stress-test:** What assumptions could be false? What could go wrong?

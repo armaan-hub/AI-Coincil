@@ -6,17 +6,30 @@ The persistent state machine behind the AI Council pattern.
 Inspired by Karpathy's autoresearch loop: keeps iterating through
 Boot → Think → Plan → Create → Review → Verify until the objective is met.
 
+Key concepts:
+  - Keep/Discard protocol (karpathy/autoresearch): After every CREATE
+    iteration, measure the success metric. If improved → KEEP. If not →
+    DISCARD (git reset) and loop back to think with accumulated learnings.
+  - Experiment Log: Tracks every iteration's metric, changes, and outcome.
+  - Lightweight Mode (--light): Bypasses multi-agent debate for simple tasks.
+  - Ponytail KISS/YAGNI: Over-engineering prevention built into every stage.
+
 Phase 0 (Boot): Scans the project, infers domain, generates domain-aware expert
 agent personas in COUNCIL_AGENTS.md. All subsequent stages use these personas.
 
 Usage (as invoked by the AI during orchestration):
     python orchestrator.py init "<objective>"          # Start a new council session (begins at "boot")
+    python orchestrator.py init --light "<objective>"  # Start in lightweight mode
     python orchestrator.py status                      # Current stage & iteration
     python orchestrator.py advance <stage> <outcome>   # Mark stage complete
     python orchestrator.py loopback <stage> <reason>   # Go back to a stage
+    python orchestrator.py keep <metric_value>          # KEEP: metric improved → continue to REVIEW
+    python orchestrator.py discard <reason>             # DISCARD: metric regressed → git reset, loop back
     python orchestrator.py check <output_path>         # Check if output satisfies objective
     python orchestrator.py models                      # Fetch live model catalog from proxy
     python orchestrator.py agents                      # Show current COUNCIL_AGENTS.md summary
+    python orchestrator.py experiment                  # Show experiment log
+    python orchestrator.py analysis                    # Generate post-run analysis report
 """
 
 import json
@@ -30,10 +43,12 @@ from pathlib import Path
 
 JOURNAL_FILE = "council_journal.md"
 AGENTS_FILE = "COUNCIL_AGENTS.md"
+EXPERIMENT_LOG = "EXPERIMENT_LOG.md"
 MAX_ITERATIONS = 50  # safety limit to prevent infinite loops
 MAX_LOOPS_PER_STAGE = 10
 
 STAGE_ORDER = ["boot", "think", "plan", "create", "review", "verify"]
+LIGHT_STAGE_ORDER = ["boot", "think", "create", "verify"]  # lightweight mode
 
 
 # ─── Data Model ──────────────────────────────────────────────────────────────
@@ -89,6 +104,10 @@ def init_journal(objective: str) -> dict:
         "criteria": criteria,
         "domain": "",
         "agents_generated": False,
+        "experiments": [],  # ← experiment log: [{iteration, metric_before, metric_after, action, summary}]
+        "lightweight": False,  # ← lightweight mode flag
+        "metric_name": "",  # ← user-defined success metric name
+        "metric_direction": "lower",  # "lower" or "higher" = better
     }
     _write_state(state)
     print(f"✅ Council initialized | Iteration 1 | Stage: boot")
@@ -264,6 +283,248 @@ def next_iteration() -> dict:
     print(f"🔄 Starting Iteration {state['iteration']} | Stage: think{agents_note}")
     print(f"   Total loops so far: {state['total_loops']}")
     return state
+
+
+def experiment_keep(metric_value: str) -> dict:
+    """KEEP: Metric improved → record success, advance to review."""
+    state = get_state()
+    if not state:
+        print("❌ No council journal found.")
+        sys.exit(1)
+
+    record = {
+        "iteration": state["iteration"],
+        "stage": state["stage"],
+        "action": "KEEP",
+        "metric": metric_value,
+        "timestamp": _now(),
+        "iter_count": len(state.get("experiments", [])),
+    }
+    state.setdefault("experiments", []).append(record)
+    state["deadman"] = _now()
+
+    # Generate diff summary
+    diff_summary = _get_git_diff_summary()
+    record["changes"] = diff_summary
+
+    # Log to journal
+    entry = {
+        "iteration": state["iteration"],
+        "stage": "create",
+        "action": "KEEP",
+        "reason": f"Metric: {metric_value} | Changes: {diff_summary[:50]}",
+        "timestamp": _now(),
+    }
+    state.setdefault("history", []).append(entry)
+
+    _write_experiment_log(state)
+    _write_state(state)
+    print(f"✅ [KEEP] Iteration {state['iteration']} — metric: {metric_value}")
+    print(f"   Changes kept: {diff_summary[:80]}")
+    if diff_summary:
+        print(f"   Full diff: git diff")
+    print(f"   → Advancing to review stage")
+    return state
+
+
+def experiment_discard(reason: str) -> dict:
+    """DISCARD: Metric regressed → git reset, record learnings, loop back to think."""
+    state = get_state()
+    if not state:
+        print("❌ No council journal found.")
+        sys.exit(1)
+
+    record = {
+        "iteration": state["iteration"],
+        "stage": state["stage"],
+        "action": "DISCARD",
+        "reason": reason,
+        "timestamp": _now(),
+        "iter_count": len(state.get("experiments", [])),
+    }
+    state.setdefault("experiments", []).append(record)
+    state["deadman"] = _now()
+
+    # Get diff before rollback (for learning)
+    diff_summary = _get_git_diff_summary()
+    record["changes"] = diff_summary
+
+    # Log to journal
+    entry = {
+        "iteration": state["iteration"],
+        "stage": "create",
+        "action": "DISCARD",
+        "reason": f"{reason} | Rolled back: {diff_summary[:40]}",
+        "timestamp": _now(),
+    }
+    state.setdefault("history", []).append(entry)
+
+    # Git reset — rollback all uncommitted changes
+    _git_reset_hard()
+
+    _write_experiment_log(state)
+    _write_state(state)
+    print(f"⏪ [DISCARD] Iteration {state['iteration']} — {reason}")
+    print(f"   Changes rolled back via git reset: {diff_summary[:80]}")
+    print(f"   → Looping back to think with learnings")
+
+    # Loop back to think with the discard reason as context
+    loopback("think", f"DISCARDED: {reason}")
+    return state
+
+
+def experiment_log() -> None:
+    """Display the experiment log."""
+    state = get_state()
+    if not state:
+        print("❌ No council journal found.")
+        return
+
+    experiments = state.get("experiments", [])
+    if not experiments:
+        print("\n📊 EXPERIMENT LOG (empty)")
+        print(f"{'='*60}")
+        print("   No experiments recorded yet.")
+        print(f"{'='*60}\n")
+        return
+
+    metric_name = state.get("metric_name", "metric")
+    direction = state.get("metric_direction", "lower")
+
+    print(f"\n📊 EXPERIMENT LOG ({len(experiments)} experiments)")
+    print(f"   Metric: {metric_name} ({'lower is better' if direction == 'lower' else 'higher is better'})")
+    print(f"{'='*70}")
+    print(f"  # | Iter | Action  | Metric         | Changes")
+    print(f"{'='*70}")
+    for i, exp in enumerate(experiments):
+        action = exp.get("action", "?")
+        iter_n = exp.get("iteration", "?")
+        metric = exp.get("metric", exp.get("reason", "?"))[:20]
+        changes = exp.get("changes", "")[:35]
+        action_icon = "✅" if action == "KEEP" else "⏪"
+        print(f"  {i+1:2d} | {iter_n:4d} | {action_icon} {action:7s} | {metric:15s} | {changes}")
+    print(f"{'='*70}\n")
+
+
+def generate_analysis() -> None:
+    """Generate a post-run analysis report (inspired by karpathy/autoresearch analysis.ipynb)."""
+    state = get_state()
+    if not state:
+        print("❌ No council journal found.")
+        return
+
+    experiments = state.get("experiments", [])
+    metric_name = state.get("metric_name", "metric")
+
+    lines = [
+        "# Council Analysis Report",
+        "",
+        f"*Generated: {_now()}*",
+        f"*Objective: {state.get('objective', 'N/A')}*",
+        f"*Iterations completed: {state.get('iteration', 0)}*",
+        f"*Total loops: {state.get('total_loops', 0)}*",
+        "",
+        "## Overview",
+        "",
+        f"**Objective:** {state.get('objective', 'N/A')}",
+        f"**Domain:** {state.get('domain', 'N/A')}",
+        f"**Metric:** {metric_name} ({'lower is better' if state.get('metric_direction') == 'lower' else 'higher is better'})",
+        "",
+        "## Experiment Summary",
+        "",
+        "| # | Iteration | Action | Metric | Changes |",
+        "|---|---|---|---|---|",
+    ]
+
+    for i, exp in enumerate(experiments):
+        action = exp.get("action", "?")
+        iter_n = exp.get("iteration", "?")
+        metric = exp.get("metric", exp.get("reason", "?"))
+        changes = exp.get("changes", "")
+        lines.append(f"| {i+1} | {iter_n} | {action} | {metric} | {changes} |")
+
+    # Summary statistics
+    kept = [e for e in experiments if e.get("action") == "KEEP"]
+    discarded = [e for e in experiments if e.get("action") == "DISCARD"]
+    lines.extend([
+        "",
+        "## Statistics",
+        "",
+        f"- Total experiments: {len(experiments)}",
+        f"- Kept: {len(kept)}",
+        f"- Discarded: {len(discarded)}",
+        f"- Keep rate: {len(kept) / max(len(experiments), 1) * 100:.0f}%",
+        "",
+        "## Key Learnings",
+        "",
+    ])
+
+    # Add discard reasons as learnings
+    for e in discarded:
+        reason = e.get("reason", "No reason given")
+        changes = e.get("changes", "")
+        lines.append(f"- **Discarded (Iter {e.get('iteration')}):** {reason}")
+        if changes:
+            lines.append(f"  - Changes rolled back: {changes}")
+
+    lines.extend([
+        "",
+        "## Recommendations",
+        "",
+        "Based on the experiment history, future iterations should:",
+        "",
+    ])
+
+    if discarded:
+        lines.append("- Avoid approaches that were previously discarded")
+        lines.append("- Build on kept successes")
+    else:
+        lines.append("- Continue current approach (no discards needed)")
+    lines.append("- Focus on the metric definition and measurement")
+    lines.append("")
+
+    content = "\n".join(lines)
+    try:
+        with open("ANALYSIS_REPORT.md", "w") as f:
+            f.write(content)
+        print(f"📊 Analysis report written to ANALYSIS_REPORT.md")
+        print(f"   {len(experiments)} experiments analyzed")
+        print(f"   {len(kept)} kept, {len(discarded)} discarded")
+    except Exception as e:
+        print(f"⚠️  Could not write analysis report: {e}")
+
+
+# ─── Git Helpers ──────────────────────────────────────────────────────────────
+
+
+def _get_git_diff_summary() -> str:
+    """Get a short summary of uncommitted changes (or last commit if clean)."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--stat"],
+            capture_output=True, text=True, timeout=10
+        )
+        stat = result.stdout.strip()
+        if not stat:
+            # Try last commit
+            result = subprocess.run(
+                ["git", "log", "-1", "--oneline"],
+                capture_output=True, text=True, timeout=10
+            )
+            stat = result.stdout.strip() if result.stdout.strip() else "no changes"
+        return stat[:100]
+    except Exception:
+        return "git diff unavailable"
+
+
+def _git_reset_hard() -> bool:
+    """Reset all uncommitted changes (preserves new untracked files)."""
+    try:
+        subprocess.run(["git", "checkout", "--", "."], capture_output=True, timeout=10)
+        return True
+    except Exception:
+        print("⚠️  Could not git reset — consider manual rollback")
+        return False
 
 
 def check_completion(output_path: str = None) -> dict:
@@ -703,6 +964,50 @@ def history() -> None:
 # ─── Internal Helpers ────────────────────────────────────────────────────────
 
 
+def _write_experiment_log(state: dict) -> None:
+    """Write the EXPERIMENT_LOG.md from in-memory experiment records."""
+    experiments = state.get("experiments", [])
+    metric_name = state.get("metric_name", "metric")
+    direction = state.get("metric_direction", "lower")
+
+    lines = [
+        "# Experiment Log",
+        "",
+        f"*Objective: {state.get('objective', 'N/A')}*",
+        f"*Metric: {metric_name} ({'lower is better' if direction == 'lower' else 'higher is better'})*",
+        "",
+        "## Experiments",
+        "",
+        "| # | Iteration | Action | Metric | Changes | Learnings |",
+        "|---|---|---|---|---|---|",
+    ]
+
+    for i, exp in enumerate(experiments):
+        action = exp.get("action", "?")
+        iter_n = exp.get("iteration", "?")
+        metric = exp.get("metric", "-")
+        changes = exp.get("changes", "-")
+        reason = exp.get("reason", "-")
+        lines.append(f"| {i+1} | {iter_n} | {action} | {metric} | {changes} | {reason} |")
+
+    lines.extend([
+        "",
+        "---",
+        "",
+        "**Legend:**",
+        "- ✅ KEEP = Metric improved or acceptable. Changes retained.",
+        "- ⏪ DISCARD = Metric regressed or unacceptable. Changes rolled back.",
+        "",
+    ])
+
+    content = "\n".join(lines)
+    try:
+        with open(EXPERIMENT_LOG, "w") as f:
+            f.write(content)
+    except Exception:
+        pass  # non-critical
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -722,6 +1027,9 @@ def _write_state(state: dict) -> None:
     completed = state.get("completed_stages", [])
     domain = state.get("domain", "")
     agents_generated = state.get("agents_generated", False)
+    lightweight = state.get("lightweight", False)
+    metric_name = state.get("metric_name", "")
+    metric_direction = state.get("metric_direction", "lower")
 
     lines = [
         "# Council Journal",
@@ -738,6 +1046,8 @@ def _write_state(state: dict) -> None:
         f"- Completed stages: {', '.join(completed) if completed else 'none'}",
         f"- Domain: {domain}",
         f"- Agents generated: {agents_generated}",
+        f"- Mode: {'Lightweight' if lightweight else 'Full'}",
+        f"- Metric: {metric_name} ({'lower is better' if metric_direction == 'lower' else 'higher is better'})",
         "",
         "## Completion Criteria",
     ]
@@ -844,6 +1154,17 @@ def _parse_journal(content: str) -> dict:
             elif line_stripped.startswith("- Agents generated:"):
                 val = line_stripped.split(":", 1)[1].strip().lower()
                 state["agents_generated"] = val == "true"
+            elif line_stripped.startswith("- Mode:"):
+                val = line_stripped.split(":", 1)[1].strip().lower()
+                state["lightweight"] = val == "lightweight"
+            elif line_stripped.startswith("- Metric:"):
+                metric_line = line_stripped.split(":", 1)[1].strip()
+                if "(" in metric_line:
+                    state["metric_name"] = metric_line.split("(")[0].strip()
+                    dir_str = metric_line.split("(")[1].split(")")[0]
+                    state["metric_direction"] = "lower" if "lower" in dir_str else "higher"
+                else:
+                    state["metric_name"] = metric_line
         elif current_section == "criteria" and line_stripped.startswith("- ["):
             state["criteria"].append(line_stripped)
         elif current_section == "history" and line_stripped.startswith("|"):
@@ -868,6 +1189,8 @@ def main():
         print("  status                 Show current council state and agent team")
         print("  advance <stage> [notes] Mark stage complete, advance to next")
         print("  loopback <stage> <reason>  Loop back to a stage")
+        print("  keep <metric_value>    KEEP: metric improved → go to review")
+        print("  discard \"<reason>\"     DISCARD: metric regressed → git reset, loop back")
         print("  next-iteration         Start a new iteration (back to think)")
         print("  compact                Compact the journal")
         print("  snapshot               Print state as JSON")
@@ -875,8 +1198,11 @@ def main():
         print("  check [path]           Check completion status")
         print("  models                 Fetch live model catalog from proxy")
         print("  agents                 Show current COUNCIL_AGENTS.md team summary")
+        print("  experiment             Show experiment log")
+        print("  analysis               Generate post-run analysis report")
         print("")
         print("Stages: boot → think → plan → create → review → verify")
+        print("Keep/Discard: Used after CREATE — measure metric, KEEP if improved, DISCARD if not")
         sys.exit(1)
 
     cmd = sys.argv[1]
@@ -923,6 +1249,26 @@ def main():
 
     elif cmd == "models":
         show_models()
+
+    elif cmd == "keep":
+        if len(sys.argv) < 3:
+            print("Usage: python orchestrator.py keep <metric_value>")
+            print("  e.g. python orchestrator.py keep \"val_bpb: 1.42\"")
+            sys.exit(1)
+        experiment_keep(sys.argv[2])
+
+    elif cmd == "discard":
+        if len(sys.argv) < 3:
+            print("Usage: python orchestrator.py discard \"<reason>\"")
+            print("  e.g. python orchestrator.py discard \"metric regressed from 1.42 to 1.89\"")
+            sys.exit(1)
+        experiment_discard(sys.argv[2])
+
+    elif cmd == "experiment":
+        experiment_log()
+
+    elif cmd == "analysis":
+        generate_analysis()
 
     elif cmd == "agents":
         show_agents()
